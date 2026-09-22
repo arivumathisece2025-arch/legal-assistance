@@ -1,0 +1,1 @@
+- [API client codegen](api-codegen-dom-iterable.md) — generated `Headers.entries()` requires `dom.iterable` in the client library TypeScript config.

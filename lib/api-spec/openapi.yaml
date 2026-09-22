@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: documents
+    description: Contract workspace operations
+  - name: questions
+    description: Grounded document questions
 paths:
   /healthz:
     get:
@@ -24,7 +28,94 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: List uploaded contract workspaces
+      responses:
+        "200":
+          description: Documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentSummary"
+    post:
+      operationId: createDocument
+      tags: [documents]
+      summary: Create a contract workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentInput"
+      responses:
+        "201":
+          description: Created document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSummary"
+  /documents/{id}:
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: Get a contract workspace with its clauses
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "200":
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentDetail"
+        "404":
+          description: Document not found
+    post:
+      operationId: analyzeDocument
+      tags: [documents]
+      summary: Start deterministic document analysis
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "202":
+          description: Analysis queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSummary"
+        "404":
+          description: Document not found
+  /questions:
+    post:
+      operationId: askQuestion
+      tags: [questions]
+      summary: Ask a grounded question about a document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuestionInput"
+      responses:
+        "200":
+          description: Grounded answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerResponse"
 components:
+  parameters:
+    DocumentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +124,136 @@ components:
           type: string
       required:
         - status
+    DocumentInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        fileType:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 1
+      required: [name, fileType, sizeBytes]
+    RiskSeverity:
+      type: string
+      enum: [low, medium, high]
+    DocumentStatus:
+      type: string
+      enum: [uploaded, analyzing, ready]
+    SecurityFinding:
+      type: object
+      properties:
+        label:
+          type: string
+        detail:
+          type: string
+        page:
+          type: integer
+      required: [label, detail, page]
+    DocumentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        fileType:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+        status:
+          $ref: "#/components/schemas/DocumentStatus"
+        pageCount:
+          type: integer
+        clauseCount:
+          type: integer
+        riskScore:
+          type: integer
+        highRiskCount:
+          type: integer
+        scannedDetected:
+          type: boolean
+        securityFindings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFinding"
+      required:
+        - id
+        - name
+        - fileType
+        - uploadedAt
+        - status
+        - pageCount
+        - clauseCount
+        - riskScore
+        - highRiskCount
+        - scannedDetected
+        - securityFindings
+    Clause:
+      type: object
+      properties:
+        id:
+          type: string
+        ordinal:
+          type: string
+        heading:
+          type: string
+        type:
+          type: string
+        severity:
+          $ref: "#/components/schemas/RiskSeverity"
+        summary:
+          type: string
+        text:
+          type: string
+      required: [id, ordinal, heading, type, severity, summary, text]
+    DocumentDetail:
+      allOf:
+        - $ref: "#/components/schemas/DocumentSummary"
+        - type: object
+          properties:
+            clauses:
+              type: array
+              items:
+                $ref: "#/components/schemas/Clause"
+          required: [clauses]
+    QuestionInput:
+      type: object
+      properties:
+        documentId:
+          type: string
+        question:
+          type: string
+          minLength: 1
+        perspective:
+          type: string
+          enum: [party_a, party_b]
+      required: [documentId, question, perspective]
+    Citation:
+      type: object
+      properties:
+        clauseId:
+          type: string
+        label:
+          type: string
+      required: [clauseId, label]
+    AnswerResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Citation"
+        groundingRatio:
+          type: number
+        adviceMode:
+          type: boolean
+        queued:
+          type: boolean
+      required: [answer, citations, groundingRatio, adviceMode, queued]
 

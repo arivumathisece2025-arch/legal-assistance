@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Clause Compass"
+description = "A privacy-first contract reader that helps people understand clauses, spot deterministic risks, and prepare focused questions for a lawyer without pretending to make legal decisions."
+version = "1.0.0"
+id = "artifacts/clause-compass"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20063
+
+[services.development]
+run = "pnpm --filter @workspace/clause-compass run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/clause-compass", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/clause-compass/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20063"
+BASE_PATH = "/"
