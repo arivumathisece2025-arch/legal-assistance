@@ -1,4 +1,7 @@
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import multer from "multer";
 import { Router, type IRouter } from "express";
+import { IngestionError, processUpload } from "@workspace/core";
 import {
   AnalyzeDocumentParams,
   AnalyzeDocumentResponse,
@@ -25,6 +28,14 @@ type DocumentRecord = {
     detail: string;
     page: number;
   }>;
+  injectionFindings: Array<{
+    pattern: string;
+    page: number;
+    offset: number;
+    severity: "info" | "warning";
+  }>;
+  encryptedBlob?: string;
+  expiresAt?: string;
   clauses: Array<{
     id: string;
     ordinal: string;
@@ -35,6 +46,46 @@ type DocumentRecord = {
     text: string;
   }>;
 };
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
+
+function encryptBlob(bytes: Uint8Array): string {
+  const secret = process.env.APP_ENCRYPTION_KEY;
+  if (!secret) throw new Error("APP_ENCRYPTION_KEY must be configured before storing uploads.");
+  const key = createHash("sha256").update(secret).digest();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ciphertext = Buffer.concat([cipher.update(bytes), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString("base64");
+}
+
+async function persistEncryptedDocument(document: DocumentRecord, encryptedBlob: string, expiresAt: string): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  const { db, storedDocuments } = await import("@workspace/db");
+  const { lt } = await import("drizzle-orm");
+  await db.delete(storedDocuments).where(lt(storedDocuments.expiresAt, new Date()));
+  await db.insert(storedDocuments).values({
+    id: document.id,
+    name: document.name,
+    fileType: document.fileType,
+    encryptedBlob,
+    metadata: {
+      pageCount: document.pageCount,
+      clauses: document.clauses,
+      injectionFindings: document.injectionFindings,
+    },
+    createdAt: new Date(document.uploadedAt),
+    expiresAt: new Date(expiresAt),
+  });
+}
+
+function toPublicDocument(document: DocumentRecord): Omit<DocumentRecord, "encryptedBlob"> {
+  const { encryptedBlob: _encryptedBlob, ...publicDocument } = document;
+  return publicDocument;
+}
 
 const seedDocument: DocumentRecord = {
   id: "doc-001",
@@ -54,6 +105,7 @@ const seedDocument: DocumentRecord = {
       page: 1,
     },
   ],
+  injectionFindings: [],
   clauses: [
     {
       id: "C4",
@@ -108,8 +160,73 @@ const documents = new Map<string, DocumentRecord>([[seedDocument.id, seedDocumen
 const router: IRouter = Router();
 
 router.get("/documents", (_req, res) => {
-  const response = Array.from(documents.values()).map(({ clauses: _clauses, ...document }) => document);
+  const response = Array.from(documents.values()).map((document) => {
+    const { clauses: _clauses, ...summary } = toPublicDocument(document);
+    return summary;
+  });
   res.json(ListDocumentsResponse.parse(response));
+});
+
+router.post("/documents/upload", (req, res, next): void => {
+  upload.single("file")(req, res, (error: unknown) => {
+    if (error) {
+      res.status(413).json({ code: "FILE_TOO_LARGE", message: "Upload exceeds the 15 MB limit." });
+      return;
+    }
+    next();
+  });
+}, async (req, res): Promise<void> => {
+  if (!req.file) {
+    res.status(400).json({ code: "FILE_REQUIRED", message: "Multipart field `file` is required." });
+    return;
+  }
+
+  try {
+    const processed = await processUpload(req.file.buffer);
+    const id = `doc-${Date.now()}`;
+    const uploadedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const clauses = processed.redactedPages.map((page) => ({
+      id: `P${page.pageNumber}`,
+      ordinal: String(page.pageNumber),
+      heading: `Page ${page.pageNumber}`,
+      type: "other",
+      severity: "low" as const,
+      summary: page.text.split("\n")[0]?.slice(0, 160) ?? "",
+      text: page.text,
+    }));
+    const document: DocumentRecord = {
+      id,
+      name: req.file.originalname,
+      fileType: processed.fileType.toUpperCase(),
+      uploadedAt,
+      status: "ready",
+      pageCount: processed.pageCount,
+      clauseCount: clauses.length,
+      riskScore: 0,
+      highRiskCount: 0,
+      scannedDetected: processed.isScanned,
+      securityFindings: processed.securityFindings.map((finding) => ({
+        label: finding.pattern,
+        detail: `Prompt-injection signal detected at offset ${finding.offset}.`,
+        page: finding.page,
+      })),
+      injectionFindings: processed.securityFindings,
+      clauses,
+    };
+    const encryptedBlob = encryptBlob(req.file.buffer);
+    document.encryptedBlob = encryptedBlob;
+    document.expiresAt = expiresAt;
+    await persistEncryptedDocument(document, encryptedBlob, expiresAt);
+    documents.set(id, document);
+    res.status(201).json(toPublicDocument(document));
+  } catch (error) {
+    if (error instanceof IngestionError) {
+      res.status(error.code === "SCANNED_DOCUMENT" ? 422 : 400).json({ code: error.code, message: error.message });
+      return;
+    }
+    res.status(500).json({ code: "UPLOAD_FAILED", message: "Upload could not be processed." });
+  }
 });
 
 router.post("/documents", (req, res): void => {
@@ -132,6 +249,7 @@ router.post("/documents", (req, res): void => {
     highRiskCount: 0,
     scannedDetected: false,
     securityFindings: [],
+    injectionFindings: [],
     clauses: [],
   };
 
@@ -152,7 +270,7 @@ router.get("/documents/:id", (req, res): void => {
     return;
   }
 
-  res.json(GetDocumentResponse.parse(document));
+  res.json(GetDocumentResponse.parse(toPublicDocument(document)));
 });
 
 router.post("/documents/:id", (req, res): void => {

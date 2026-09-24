@@ -1,0 +1,21 @@
+{
+  "name": "@workspace/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/__tests__/*.test.ts"
+  },
+  "dependencies": {
+    "mammoth": "^1.12.3",
+    "pdfjs-dist": "^5.7.284",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "tsx": "catalog:"
+  }
+}

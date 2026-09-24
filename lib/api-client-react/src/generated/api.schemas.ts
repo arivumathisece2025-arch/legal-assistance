@@ -41,6 +41,21 @@ export interface SecurityFinding {
   page: number;
 }
 
+export type InjectionFindingSeverity = typeof InjectionFindingSeverity[keyof typeof InjectionFindingSeverity];
+
+
+export const InjectionFindingSeverity = {
+  info: 'info',
+  warning: 'warning',
+} as const;
+
+export interface InjectionFinding {
+  pattern: string;
+  page: number;
+  offset: number;
+  severity: InjectionFindingSeverity;
+}
+
 export interface DocumentSummary {
   id: string;
   name: string;
@@ -53,6 +68,7 @@ export interface DocumentSummary {
   highRiskCount: number;
   scannedDetected: boolean;
   securityFindings: SecurityFinding[];
+  injectionFindings?: InjectionFinding[];
 }
 
 export interface Clause {
@@ -67,6 +83,10 @@ export interface Clause {
 
 export type DocumentDetail = DocumentSummary & {
   clauses: Clause[];
+};
+
+export type DocumentUploadResponse = DocumentDetail & {
+  expiresAt: string;
 };
 
 export type QuestionInputPerspective = typeof QuestionInputPerspective[keyof typeof QuestionInputPerspective];
@@ -96,4 +116,8 @@ export interface AnswerResponse {
   adviceMode: boolean;
   queued: boolean;
 }
+
+export type UploadDocumentBody = {
+  file: Blob | File;
+};
 

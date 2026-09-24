@@ -35,7 +35,13 @@ export const ListDocumentsResponseItem = zod.object({
   "label": zod.string(),
   "detail": zod.string(),
   "page": zod.number().int()
-}))
+})),
+  "injectionFindings": zod.array(zod.object({
+  "pattern": zod.string(),
+  "page": zod.number().int(),
+  "offset": zod.number().int(),
+  "severity": zod.enum(['info', 'warning'])
+})).optional()
 })
 export const ListDocumentsResponse = zod.array(ListDocumentsResponseItem)
 
@@ -68,8 +74,58 @@ export const CreateDocumentResponse = zod.object({
   "label": zod.string(),
   "detail": zod.string(),
   "page": zod.number().int()
-}))
+})),
+  "injectionFindings": zod.array(zod.object({
+  "pattern": zod.string(),
+  "page": zod.number().int(),
+  "offset": zod.number().int(),
+  "severity": zod.enum(['info', 'warning'])
+})).optional()
 })
+
+
+/**
+ * @summary Upload and shield a contract document
+ */
+export const UploadDocumentBody = zod.object({
+  "file": zod.instanceof(Blob)
+})
+
+export const UploadDocumentResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "fileType": zod.string(),
+  "uploadedAt": zod.coerce.date(),
+  "status": zod.enum(['uploaded', 'analyzing', 'ready']),
+  "pageCount": zod.number().int(),
+  "clauseCount": zod.number().int(),
+  "riskScore": zod.number().int(),
+  "highRiskCount": zod.number().int(),
+  "scannedDetected": zod.boolean(),
+  "securityFindings": zod.array(zod.object({
+  "label": zod.string(),
+  "detail": zod.string(),
+  "page": zod.number().int()
+})),
+  "injectionFindings": zod.array(zod.object({
+  "pattern": zod.string(),
+  "page": zod.number().int(),
+  "offset": zod.number().int(),
+  "severity": zod.enum(['info', 'warning'])
+})).optional()
+}).and(zod.object({
+  "clauses": zod.array(zod.object({
+  "id": zod.string(),
+  "ordinal": zod.string(),
+  "heading": zod.string(),
+  "type": zod.string(),
+  "severity": zod.enum(['low', 'medium', 'high']),
+  "summary": zod.string(),
+  "text": zod.string()
+}))
+})).and(zod.object({
+  "expiresAt": zod.coerce.date()
+}))
 
 
 /**
@@ -94,7 +150,13 @@ export const GetDocumentResponse = zod.object({
   "label": zod.string(),
   "detail": zod.string(),
   "page": zod.number().int()
-}))
+})),
+  "injectionFindings": zod.array(zod.object({
+  "pattern": zod.string(),
+  "page": zod.number().int(),
+  "offset": zod.number().int(),
+  "severity": zod.enum(['info', 'warning'])
+})).optional()
 }).and(zod.object({
   "clauses": zod.array(zod.object({
   "id": zod.string(),
@@ -130,7 +192,13 @@ export const AnalyzeDocumentResponse = zod.object({
   "label": zod.string(),
   "detail": zod.string(),
   "page": zod.number().int()
-}))
+})),
+  "injectionFindings": zod.array(zod.object({
+  "pattern": zod.string(),
+  "page": zod.number().int(),
+  "offset": zod.number().int(),
+  "severity": zod.enum(['info', 'warning'])
+})).optional()
 })
 
 

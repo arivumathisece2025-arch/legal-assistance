@@ -59,6 +59,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentSummary"
+  /documents/upload:
+    post:
+      operationId: uploadDocument
+      tags: [documents]
+      summary: Upload and shield a contract document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        "201":
+          description: Parsed and shielded document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentUploadResponse"
+        "422":
+          description: Scanned document rejected
   /documents/{id}:
     get:
       operationId: getDocument
@@ -152,6 +177,19 @@ components:
         page:
           type: integer
       required: [label, detail, page]
+    InjectionFinding:
+      type: object
+      properties:
+        pattern:
+          type: string
+        page:
+          type: integer
+        offset:
+          type: integer
+        severity:
+          type: string
+          enum: [info, warning]
+      required: [pattern, page, offset, severity]
     DocumentSummary:
       type: object
       properties:
@@ -180,6 +218,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SecurityFinding"
+        injectionFindings:
+          type: array
+          items:
+            $ref: "#/components/schemas/InjectionFinding"
       required:
         - id
         - name
@@ -220,6 +262,15 @@ components:
               items:
                 $ref: "#/components/schemas/Clause"
           required: [clauses]
+    DocumentUploadResponse:
+      allOf:
+        - $ref: "#/components/schemas/DocumentDetail"
+        - type: object
+          properties:
+            expiresAt:
+              type: string
+              format: date-time
+          required: [expiresAt]
     QuestionInput:
       type: object
       properties:

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DocumentStatus } from './documentStatus';
+import type { InjectionFinding } from './injectionFinding';
 import type { SecurityFinding } from './securityFinding';
 
 export interface DocumentSummary {
@@ -20,4 +21,5 @@ export interface DocumentSummary {
   highRiskCount: number;
   scannedDetected: boolean;
   securityFindings: SecurityFinding[];
+  injectionFindings?: InjectionFinding[];
 }
