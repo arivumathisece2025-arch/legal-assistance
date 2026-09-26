@@ -1,10 +1,25 @@
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import multer from "multer";
 import { Router, type IRouter } from "express";
-import { IngestionError, processUpload } from "@workspace/core";
+import {
+  answerQuestion,
+  compareVersions,
+  GroqProvider,
+  IngestionError,
+  MockProvider,
+  processUpload,
+  retrieveClauses,
+  type AlignableClause,
+  type Clause,
+} from "@workspace/core";
 import {
   AnalyzeDocumentParams,
   AnalyzeDocumentResponse,
+  AskQuestionBody,
+  AskQuestionResponse,
+  CompareDocumentVersionsBody,
+  CompareDocumentVersionsParams,
+  CompareDocumentVersionsResponse,
   CreateDocumentBody,
   CreateDocumentResponse,
   GetDocumentParams,
@@ -155,7 +170,133 @@ const seedDocument: DocumentRecord = {
   ],
 };
 
-const documents = new Map<string, DocumentRecord>([[seedDocument.id, seedDocument]]);
+const seedRevisedDocument: DocumentRecord = {
+  id: "doc-002",
+  name: "Northstar Services Agreement (revised)",
+  fileType: "PDF",
+  uploadedAt: "2026-09-22T10:05:00.000Z",
+  status: "ready",
+  pageCount: 15,
+  clauseCount: 5,
+  riskScore: 71,
+  highRiskCount: 4,
+  scannedDetected: false,
+  securityFindings: [
+    {
+      label: "No hidden instructions found",
+      detail: "The document passed the prompt-injection scan.",
+      page: 1,
+    },
+  ],
+  injectionFindings: [],
+  clauses: [
+    {
+      id: "R4",
+      ordinal: "4",
+      heading: "Payment terms",
+      type: "payment",
+      severity: "high",
+      summary: "Invoices are payable within 90 days of receipt.",
+      text: "Client shall pay each undisputed invoice within 90 days of receipt.",
+    },
+    {
+      id: "R5",
+      ordinal: "5",
+      heading: "Data processing",
+      type: "data_privacy",
+      severity: "high",
+      summary: "Personal data may be shared with unnamed third parties.",
+      text: "The Provider may share personal data with affiliates, service providers and third parties for processing and marketing.",
+    },
+    {
+      id: "R7",
+      ordinal: "7",
+      heading: "Indemnification",
+      type: "indemnity",
+      severity: "high",
+      summary: "The indemnity is unlimited and has no cap.",
+      text: "Provider shall indemnify, defend, and hold harmless Client from any and all claims, losses, damages, liabilities, and expenses arising from the Services, without cap and without limit.",
+    },
+    {
+      id: "R12",
+      ordinal: "12",
+      heading: "Termination",
+      type: "termination",
+      severity: "high",
+      summary: "The client can terminate for convenience while the provider cannot.",
+      text: "Client may terminate this Agreement for convenience upon thirty (30) days' written notice. Provider may not terminate for convenience.",
+    },
+    {
+      id: "R15",
+      ordinal: "15",
+      heading: "Governing law",
+      type: "jurisdiction",
+      severity: "medium",
+      summary: "The agreement uses Indian law with courts in Singapore.",
+      text: "This Agreement is governed by the laws of India. The courts of Singapore shall have exclusive jurisdiction.",
+    },
+  ],
+};
+
+const documents = new Map<string, DocumentRecord>([
+  [seedDocument.id, seedDocument],
+  [seedRevisedDocument.id, seedRevisedDocument],
+]);
+
+export function getDocumentRecord(id: string): DocumentRecord | undefined {
+  return documents.get(id);
+}
+
+export async function answerDocumentQuestion(documentId: string, question: string, perspective: "party_a" | "party_b", language: string = "en") {
+  const document = getDocumentRecord(documentId);
+  if (!document) {
+    throw new Error("Document not found");
+  }
+
+  const clauses: Clause[] = document.clauses.map((clause) => ({
+    id: clause.id,
+    ordinal: clause.ordinal,
+    heading: clause.heading,
+    text: clause.text,
+    page: 1,
+    charStart: 0,
+    charEnd: clause.text.length,
+  }));
+
+  const provider = {
+    async completeJson<T>(_system: string, _user: string, schema: { parse: (value: unknown) => T }): Promise<T> {
+      const candidates = retrieveClauses(clauses, question, 6);
+      if (!candidates.length) {
+        return schema.parse({ answer: "The contract text does not answer that question." }) as T;
+      }
+
+      const topClause = candidates[0];
+      const quote = topClause.text.replace(/\s+/g, " ").trim();
+      const answer = perspective === "party_b"
+        ? `From the document's wording, the relevant clause is ${quote} [${topClause.id}] and it is worth checking how that allocation works in practice.`
+        : `The document states: ${quote} [${topClause.id}]`;
+
+      return schema.parse({ answer }) as T;
+    },
+  };
+
+  const result = await answerQuestion(question, clauses, provider as any, language);
+  const citations = result.citations.map((clauseId) => {
+    const clause = document.clauses.find((candidate) => candidate.id === clauseId);
+    return {
+      clauseId,
+      label: clause ? `${clause.ordinal} · ${clause.heading}` : clauseId,
+    };
+  });
+
+  return AskQuestionResponse.parse({
+    answer: result.answer,
+    citations,
+    groundingRatio: result.groundingRatio,
+    adviceMode: result.adviceMode,
+    queued: false,
+  });
+}
 
 const router: IRouter = Router();
 
@@ -271,6 +412,130 @@ router.get("/documents/:id", (req, res): void => {
   }
 
   res.json(GetDocumentResponse.parse(toPublicDocument(document)));
+});
+
+router.post("/documents/:id/ask", async (req, res): Promise<void> => {
+  const params = GetDocumentParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const payload = {
+    ...req.body,
+    documentId: req.body.documentId ?? params.data.id,
+  };
+  const parsed = AskQuestionBody.safeParse(payload);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const wantsSse = req.headers.accept?.includes("text/event-stream") || req.query.stream === "sse";
+  if (wantsSse) {
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+    res.write(`event: status\ndata: ${JSON.stringify({ step: "retrieving" })}\n\n`);
+  }
+
+  try {
+    const result = await answerDocumentQuestion(parsed.data.documentId, parsed.data.question, parsed.data.perspective, "en");
+
+    if (wantsSse) {
+      res.write(`event: answer\ndata: ${JSON.stringify(result)}\n\n`);
+      res.write("event: done\ndata: {\"ok\":true}\n\n");
+      res.end();
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    if (wantsSse) {
+      res.write(`event: error\ndata: ${JSON.stringify({ message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+      res.end();
+      return;
+    }
+
+    res.status(404).json({ error: "Document not found" });
+  }
+});
+
+function toComparableClause(clause: DocumentRecord["clauses"][number]): AlignableClause {
+  return {
+    id: clause.id,
+    ordinal: clause.ordinal,
+    heading: clause.heading,
+    text: clause.text,
+    type: clause.type,
+  };
+}
+
+/**
+ * Phase 7 sends only the changed pairs to the reasoning tier. Nothing here
+ * hardcodes a model name: the smart tier is read from the environment and
+ * falls back to the provider default when it is not configured.
+ */
+function versionDiffProvider() {
+  if (process.env.MOCK_LLM === "1") {
+    return new MockProvider();
+  }
+
+  const smartModel = process.env.GROQ_MODEL_SMART ?? process.env.GROQ_MODEL_FAST;
+  return new GroqProvider(smartModel ? { model: smartModel } : {});
+}
+
+router.post("/documents/:id/compare", async (req, res): Promise<void> => {
+  const params = CompareDocumentVersionsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const body = CompareDocumentVersionsBody.safeParse(req.body ?? {});
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const revisedDocument = documents.get(params.data.id);
+  const baseDocument = documents.get(body.data.against);
+  if (!revisedDocument || !baseDocument) {
+    res.status(404).json({ error: "Version not found" });
+    return;
+  }
+
+  if (revisedDocument.id === baseDocument.id) {
+    res.status(400).json({ error: "Choose two different versions to compare." });
+    return;
+  }
+
+  const perspective =
+    body.data.perspective === "party_a" ? "partyA" : body.data.perspective === "party_b" ? "partyB" : "both";
+
+  try {
+    const comparison = await compareVersions(
+      {
+        id: baseDocument.id,
+        name: baseDocument.name,
+        clauses: baseDocument.clauses.map(toComparableClause),
+      },
+      {
+        id: revisedDocument.id,
+        name: revisedDocument.name,
+        clauses: revisedDocument.clauses.map(toComparableClause),
+      },
+      { perspective, provider: versionDiffProvider() },
+    );
+
+    res.json(CompareDocumentVersionsResponse.parse(comparison));
+  } catch (error) {
+    res.status(500).json({
+      code: "COMPARE_FAILED",
+      message: error instanceof Error ? error.message : "Comparison failed",
+    });
+  }
 });
 
 router.post("/documents/:id", (req, res): void => {

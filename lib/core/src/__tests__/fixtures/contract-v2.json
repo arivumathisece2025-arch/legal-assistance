@@ -1,0 +1,55 @@
+{
+  "id": "contract-v2",
+  "name": "Northwind Services Agreement (v2)",
+  "clauses": [
+    {
+      "id": "C1",
+      "ordinal": "1",
+      "heading": "Payment terms",
+      "type": "payment",
+      "text": "Client shall pay each undisputed invoice within 90 days of receipt."
+    },
+    {
+      "id": "C3",
+      "ordinal": "3",
+      "heading": "Indemnification",
+      "type": "indemnity",
+      "text": "Provider shall indemnify Client for all losses, without cap and without limit."
+    },
+    {
+      "id": "C4",
+      "ordinal": "4",
+      "heading": "Confidentiality",
+      "type": "confidentiality",
+      "text": "Each party shall protect confidential information for three years after termination."
+    },
+    {
+      "id": "C5",
+      "ordinal": "5",
+      "heading": "Termination",
+      "type": "termination",
+      "text": "Either party may terminate for convenience on thirty days' written notice."
+    },
+    {
+      "id": "C6",
+      "ordinal": "6",
+      "heading": "Governing law",
+      "type": "jurisdiction",
+      "text": "This agreement is governed by the laws of India, and the courts of Singapore shall have exclusive jurisdiction."
+    },
+    {
+      "id": "C7",
+      "ordinal": "7",
+      "heading": "Data processing",
+      "type": "data_privacy",
+      "text": "The provider may share personal data with affiliates, service providers and third parties for marketing."
+    },
+    {
+      "id": "C8",
+      "ordinal": "8",
+      "heading": "Non-compete",
+      "type": "non_compete",
+      "text": "The consultant shall not compete for 36 months after termination."
+    }
+  ]
+}

@@ -115,6 +115,59 @@ paths:
                 $ref: "#/components/schemas/DocumentSummary"
         "404":
           description: Document not found
+  /documents/{id}/compare:
+    post:
+      operationId: compareDocumentVersions
+      tags: [documents]
+      summary: Compare two contract versions clause by clause
+      description: >-
+        Aligns the clauses of the document in the path (the revised version)
+        against the `against` document (the base version) using heading
+        similarity, clause-type match and Jaccard token similarity. Re-runs the
+        deterministic risk rule pack on both versions, diffs the findings, and
+        sends only the matched pairs below the similarity threshold to the
+        smart model, one pair per call, cached by the pair's combined hash.
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompareVersionsBody"
+      responses:
+        "200":
+          description: Clause alignment, change labels and risk findings diff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionComparison"
+        "404":
+          description: Base or revised version not found
+  /documents/{id}/ask:
+    post:
+      operationId: askDocumentQuestion
+      tags: [questions]
+      summary: Ask a grounded question about a specific document
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuestionInput"
+      responses:
+        "200":
+          description: Grounded answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerResponse"
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events stream with status, answer, and done events.
   /questions:
     post:
       operationId: askQuestion
@@ -307,4 +360,167 @@ components:
         queued:
           type: boolean
       required: [answer, citations, groundingRatio, adviceMode, queued]
+    CompareVersionsBody:
+      type: object
+      properties:
+        against:
+          type: string
+          description: Id of the earlier (base) version to compare against.
+        perspective:
+          type: string
+          enum: [both, party_a, party_b]
+          description: Which side the reader is on, used to label which party a change favours.
+      required: [against]
+    VersionDocumentRef:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+      required: [id, name]
+    ClauseRef:
+      type: object
+      properties:
+        id:
+          type: string
+        ordinal:
+          type: string
+        heading:
+          type: string
+        type:
+          type: string
+        text:
+          type: string
+      required: [id, ordinal, heading, type, text]
+    SimilarityBreakdown:
+      type: object
+      properties:
+        headingSimilarity:
+          type: number
+        clauseTypeMatch:
+          type: number
+        tokenSimilarity:
+          type: number
+      required: [headingSimilarity, clauseTypeMatch, tokenSimilarity]
+    MaterialChangeNote:
+      type: object
+      properties:
+        available:
+          type: boolean
+        fromCache:
+          type: boolean
+        materiallyChanged:
+          type: boolean
+        summary:
+          type: string
+        favors:
+          type: string
+          enum: [partyA, partyB, neither]
+        rationale:
+          type: string
+      required: [available, fromCache, materiallyChanged, summary, favors, rationale]
+    FindingChange:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [introduced, resolved, changed, unchanged]
+        label:
+          type: string
+          enum: [Added, Removed, Changed]
+        ruleId:
+          type: string
+        title:
+          type: string
+        severity:
+          $ref: "#/components/schemas/RiskSeverity"
+        concerns:
+          type: string
+          enum: [partyA, partyB, both]
+        favorsOtherParty:
+          type: boolean
+        message:
+          type: string
+        beforeClauseId:
+          type: string
+        afterClauseId:
+          type: string
+      required: [status, ruleId, title, severity, concerns, favorsOtherParty, message]
+    ComparisonRow:
+      type: object
+      properties:
+        key:
+          type: string
+        kind:
+          type: string
+          enum: [unchanged, changed, added, removed]
+        similarity:
+          type: number
+        labels:
+          type: array
+          items:
+            type: string
+            enum: [Added, Removed, Changed, Favors other party]
+        before:
+          $ref: "#/components/schemas/ClauseRef"
+        after:
+          $ref: "#/components/schemas/ClauseRef"
+        breakdown:
+          $ref: "#/components/schemas/SimilarityBreakdown"
+        materialChange:
+          $ref: "#/components/schemas/MaterialChangeNote"
+        findingChanges:
+          type: array
+          items:
+            $ref: "#/components/schemas/FindingChange"
+      required: [key, kind, similarity, labels, findingChanges]
+    VersionComparisonSummary:
+      type: object
+      properties:
+        totalRows:
+          type: integer
+        changedCount:
+          type: integer
+        addedCount:
+          type: integer
+        removedCount:
+          type: integer
+        unchangedCount:
+          type: integer
+        introducedRiskCount:
+          type: integer
+        resolvedRiskCount:
+          type: integer
+        favorsOtherPartyCount:
+          type: integer
+      required:
+        - totalRows
+        - changedCount
+        - addedCount
+        - removedCount
+        - unchangedCount
+        - introducedRiskCount
+        - resolvedRiskCount
+        - favorsOtherPartyCount
+    VersionComparison:
+      type: object
+      properties:
+        base:
+          $ref: "#/components/schemas/VersionDocumentRef"
+        revised:
+          $ref: "#/components/schemas/VersionDocumentRef"
+        threshold:
+          type: number
+        perspective:
+          type: string
+          enum: [partyA, partyB, both]
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ComparisonRow"
+        summary:
+          $ref: "#/components/schemas/VersionComparisonSummary"
+      required: [base, revised, threshold, perspective, rows, summary]
+
 

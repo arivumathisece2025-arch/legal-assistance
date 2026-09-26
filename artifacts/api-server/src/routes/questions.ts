@@ -1,34 +1,45 @@
 import { Router, type IRouter } from "express";
-import { AskQuestionBody, AskQuestionResponse } from "@workspace/api-zod";
+import { AskQuestionBody } from "@workspace/api-zod";
+import { answerDocumentQuestion } from "./documents";
 
 const router: IRouter = Router();
 
-router.post("/questions", (req, res): void => {
+router.post("/questions", async (req, res): Promise<void> => {
   const parsed = AskQuestionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const isAdviceQuestion = /\b(should i|will i|can they sue|what should i)\b/i.test(
-    parsed.data.question,
-  );
-  const answer = isAdviceQuestion
-    ? "I can explain what the document says, but I cannot decide whether you should sign it or predict a legal outcome. The document gives the other party a broad indemnity in [C7] and one-sided convenience termination rights in [C12]. Ask a lawyer whether those provisions match your risk tolerance and negotiating position."
-    : "The document states that the client may terminate for convenience with thirty (30) days' written notice, while the provider does not have the same convenience termination right. That appears in [C12].";
+  const wantsSse = req.headers.accept?.includes("text/event-stream") || req.query.stream === "sse";
+  if (wantsSse) {
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+    res.write(`event: status\ndata: ${JSON.stringify({ step: "retrieving" })}\n\n`);
+  }
 
-  res.json(
-    AskQuestionResponse.parse({
-      answer,
-      citations: [
-        { clauseId: "C12", label: "Clause 12 · Termination" },
-        ...(isAdviceQuestion ? [{ clauseId: "C7", label: "Clause 7 · Indemnification" }] : []),
-      ],
-      groundingRatio: 1,
-      adviceMode: isAdviceQuestion,
-      queued: false,
-    }),
-  );
+  try {
+    const result = await answerDocumentQuestion(parsed.data.documentId, parsed.data.question, parsed.data.perspective, "en");
+
+    if (wantsSse) {
+      res.write(`event: answer\ndata: ${JSON.stringify(result)}\n\n`);
+      res.write("event: done\ndata: {\"ok\":true}\n\n");
+      res.end();
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    if (wantsSse) {
+      res.write(`event: error\ndata: ${JSON.stringify({ message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+      res.end();
+      return;
+    }
+
+    res.status(404).json({ error: "Document not found" });
+  }
 });
 
 export default router;

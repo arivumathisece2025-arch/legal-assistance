@@ -153,3 +153,90 @@ test("scanned PDF upload returns a typed error instead of empty text", async () 
     assert.equal(body.code, "SCANNED_DOCUMENT");
   });
 });
+
+test("uploading a real document and asking a grounded question returns a grounded answer", async () => {
+  await withServer(async (baseUrl) => {
+    const form = new FormData();
+    const documentText = "TERMINATION Client may terminate this Agreement for convenience upon thirty (30) days' written notice.";
+    form.append("file", asBlob(makePdf(documentText)), "termination.pdf");
+    const uploadResponse = await fetch(`${baseUrl}/api/documents/upload`, { method: "POST", body: form });
+    const uploadBody = (await uploadResponse.json()) as { id: string; clauses: Array<{ id: string; text: string }> };
+
+    assert.equal(uploadResponse.status, 201);
+    assert.ok(uploadBody.id);
+
+    const askResponse = await fetch(`${baseUrl}/api/documents/${uploadBody.id}/ask`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question: "What happens if I terminate early?", perspective: "party_a" }),
+    });
+    const askBody = (await askResponse.json()) as { answer: string; citations: Array<{ clauseId: string }>; groundingRatio: number };
+
+    assert.equal(askResponse.status, 200);
+    assert.match(askBody.answer.toLowerCase(), /terminate|convenience/);
+    assert.ok(Array.isArray(askBody.citations));
+    assert.ok(askBody.citations.length > 0);
+    assert.equal(typeof askBody.groundingRatio, "number");
+    assert.ok(askBody.groundingRatio >= 0);
+  });
+});
+
+test("audio transcription route forwards the configured whisper model and requested language", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env.GROQ_API_KEY;
+  const originalModel = process.env.GROQ_MODEL_AUDIO;
+
+  process.env.GROQ_API_KEY = "integration-test-key";
+  process.env.GROQ_MODEL_AUDIO = "whisper-test-model";
+
+  const { default: audioRouter } = await import("../routes/audio");
+  const route = (audioRouter as any).stack.find((layer: any) => layer.route?.path === "/audio/transcribe");
+  const handler = route.route.stack[route.route.stack.length - 1].handle;
+
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const payload = init?.body ? await new Response(init.body as BodyInit).text() : "";
+    assert.match(payload, /whisper-test-model/);
+    assert.match(payload, /hi/);
+    return new Response(JSON.stringify({ text: "नमस्ते" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  const req = {
+    file: { buffer: new Uint8Array([1, 2, 3, 4]), mimetype: "audio/webm", originalname: "voice.webm" },
+    body: { language: "hi" },
+  } as any;
+
+  let statusCode = 200;
+  let jsonPayload: any;
+  const res = {
+    status(code: number) {
+      statusCode = code;
+      return this;
+    },
+    json(payload: any) {
+      jsonPayload = payload;
+      return this;
+    },
+  } as any;
+
+  try {
+    await handler(req, res, () => {});
+    assert.equal(statusCode, 200);
+    assert.equal(jsonPayload.text, "नमस्ते");
+    assert.equal(jsonPayload.language, "hi");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) {
+      delete process.env.GROQ_API_KEY;
+    } else {
+      process.env.GROQ_API_KEY = originalApiKey;
+    }
+    if (originalModel === undefined) {
+      delete process.env.GROQ_MODEL_AUDIO;
+    } else {
+      process.env.GROQ_MODEL_AUDIO = originalModel;
+    }
+  }
+});

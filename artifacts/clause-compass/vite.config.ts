@@ -27,6 +27,17 @@ if (!basePath) {
   );
 }
 
+// The API server runs as a separate process, so the SPA's relative `/api/*`
+// requests have to be forwarded to it for both `dev` and `preview`.
+const apiTarget = `http://127.0.0.1:${process.env.API_PORT ?? '3000'}`;
+
+const apiProxy = {
+  '/api': {
+    target: apiTarget,
+    changeOrigin: true,
+  },
+};
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -69,6 +80,7 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
     allowedHosts: true,
+    proxy: apiProxy,
     fs: {
       strict: true,
     },
@@ -77,5 +89,6 @@ export default defineConfig({
     port,
     host: '0.0.0.0',
     allowedHosts: true,
+    proxy: apiProxy,
   },
 });

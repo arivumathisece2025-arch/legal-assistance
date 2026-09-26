@@ -21,13 +21,15 @@ import type {
 
 import type {
   AnswerResponse,
+  CompareVersionsBody,
   DocumentDetail,
   DocumentInput,
   DocumentSummary,
   DocumentUploadResponse,
   HealthStatus,
   QuestionInput,
-  UploadDocumentBody
+  UploadDocumentBody,
+  VersionComparison
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -525,6 +527,185 @@ export const useAnalyzeDocument = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAnalyzeDocumentMutationOptions(options));
+    }
+
+export const getCompareDocumentVersionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/documents/${id}/compare`
+}
+
+/**
+ * Aligns the clauses of the document in the path (the revised version) against the `against` document (the base version) using heading similarity, clause-type match and Jaccard token similarity. Re-runs the deterministic risk rule pack on both versions, diffs the findings, and sends only the matched pairs below the similarity threshold to the smart model, one pair per call, cached by the pair's combined hash.
+ * @summary Compare two contract versions clause by clause
+ */
+export const compareDocumentVersions = async (id: string,
+    compareVersionsBody: CompareVersionsBody, options?: Parameters<typeof customFetch>[1]): Promise<VersionComparison> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<VersionComparison>(getCompareDocumentVersionsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(compareVersionsBody)
+  }
+);}
+
+
+
+
+
+export const getCompareDocumentVersionsMutationKey = () => ['compareDocumentVersions'] as const;
+
+export const getCompareDocumentVersionsMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof compareDocumentVersions>>, TError,CompareDocumentVersionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof compareDocumentVersions>>, TError,CompareDocumentVersionsMutationVariables, TContext> => {
+
+const mutationKey = getCompareDocumentVersionsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof compareDocumentVersions>>, CompareDocumentVersionsMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  compareDocumentVersions(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompareDocumentVersionsMutationResult = NonNullable<Awaited<ReturnType<typeof compareDocumentVersions>>>
+    export type CompareDocumentVersionsMutationBody = BodyType<CompareVersionsBody>
+    export type CompareDocumentVersionsMutationError = ErrorType<void>
+    export type CompareDocumentVersionsMutationVariables = {id: string;data: BodyType<CompareVersionsBody>}
+
+    /**
+ * @summary Compare two contract versions clause by clause
+ */
+export const useCompareDocumentVersions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof compareDocumentVersions>>, TError,CompareDocumentVersionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof compareDocumentVersions>>,
+        TError,
+        CompareDocumentVersionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCompareDocumentVersionsMutationOptions(options));
+    }
+
+export const getAskDocumentQuestionUrl = (id: string,) => {
+
+
+
+
+  return `/api/documents/${id}/ask`
+}
+
+/**
+ * @summary Ask a grounded question about a specific document
+ */
+export const askDocumentQuestion = async (id: string,
+    questionInput: QuestionInput, options?: Parameters<typeof customFetch>[1]): Promise<AnswerResponse | string> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AnswerResponse | string>(getAskDocumentQuestionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(questionInput)
+  }
+);}
+
+
+
+
+
+export const getAskDocumentQuestionMutationKey = () => ['askDocumentQuestion'] as const;
+
+export const getAskDocumentQuestionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askDocumentQuestion>>, TError,AskDocumentQuestionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof askDocumentQuestion>>, TError,AskDocumentQuestionMutationVariables, TContext> => {
+
+const mutationKey = getAskDocumentQuestionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof askDocumentQuestion>>, AskDocumentQuestionMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  askDocumentQuestion(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AskDocumentQuestionMutationResult = NonNullable<Awaited<ReturnType<typeof askDocumentQuestion>>>
+    export type AskDocumentQuestionMutationBody = BodyType<QuestionInput>
+    export type AskDocumentQuestionMutationError = ErrorType<unknown>
+    export type AskDocumentQuestionMutationVariables = {id: string;data: BodyType<QuestionInput>}
+
+    /**
+ * @summary Ask a grounded question about a specific document
+ */
+export const useAskDocumentQuestion = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askDocumentQuestion>>, TError,AskDocumentQuestionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof askDocumentQuestion>>,
+        TError,
+        AskDocumentQuestionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAskDocumentQuestionMutationOptions(options));
     }
 
 export const getAskQuestionUrl = () => {

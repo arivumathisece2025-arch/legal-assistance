@@ -8,7 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/__tests__/*.test.ts"
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "test:coverage": "tsx --test --experimental-test-coverage src/__tests__/*.test.ts"
   },
   "dependencies": {
     "mammoth": "^1.12.3",

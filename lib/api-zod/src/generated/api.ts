@@ -203,6 +203,116 @@ export const AnalyzeDocumentResponse = zod.object({
 
 
 /**
+ * Aligns the clauses of the document in the path (the revised version) against the `against` document (the base version) using heading similarity, clause-type match and Jaccard token similarity. Re-runs the deterministic risk rule pack on both versions, diffs the findings, and sends only the matched pairs below the similarity threshold to the smart model, one pair per call, cached by the pair's combined hash.
+ * @summary Compare two contract versions clause by clause
+ */
+export const CompareDocumentVersionsParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const CompareDocumentVersionsBody = zod.object({
+  "against": zod.string().describe('Id of the earlier (base) version to compare against.'),
+  "perspective": zod.enum(['both', 'party_a', 'party_b']).optional().describe('Which side the reader is on, used to label which party a change favours.')
+})
+
+export const CompareDocumentVersionsResponse = zod.object({
+  "base": zod.object({
+  "id": zod.string(),
+  "name": zod.string()
+}),
+  "revised": zod.object({
+  "id": zod.string(),
+  "name": zod.string()
+}),
+  "threshold": zod.number(),
+  "perspective": zod.enum(['partyA', 'partyB', 'both']),
+  "rows": zod.array(zod.object({
+  "key": zod.string(),
+  "kind": zod.enum(['unchanged', 'changed', 'added', 'removed']),
+  "similarity": zod.number(),
+  "labels": zod.array(zod.enum(['Added', 'Removed', 'Changed', 'Favors other party'])),
+  "before": zod.object({
+  "id": zod.string(),
+  "ordinal": zod.string(),
+  "heading": zod.string(),
+  "type": zod.string(),
+  "text": zod.string()
+}).optional(),
+  "after": zod.object({
+  "id": zod.string(),
+  "ordinal": zod.string(),
+  "heading": zod.string(),
+  "type": zod.string(),
+  "text": zod.string()
+}).optional(),
+  "breakdown": zod.object({
+  "headingSimilarity": zod.number(),
+  "clauseTypeMatch": zod.number(),
+  "tokenSimilarity": zod.number()
+}).optional(),
+  "materialChange": zod.object({
+  "available": zod.boolean(),
+  "fromCache": zod.boolean(),
+  "materiallyChanged": zod.boolean(),
+  "summary": zod.string(),
+  "favors": zod.enum(['partyA', 'partyB', 'neither']),
+  "rationale": zod.string()
+}).optional(),
+  "findingChanges": zod.array(zod.object({
+  "status": zod.enum(['introduced', 'resolved', 'changed', 'unchanged']),
+  "label": zod.enum(['Added', 'Removed', 'Changed']).optional(),
+  "ruleId": zod.string(),
+  "title": zod.string(),
+  "severity": zod.enum(['low', 'medium', 'high']),
+  "concerns": zod.enum(['partyA', 'partyB', 'both']),
+  "favorsOtherParty": zod.boolean(),
+  "message": zod.string(),
+  "beforeClauseId": zod.string().optional(),
+  "afterClauseId": zod.string().optional()
+}))
+})),
+  "summary": zod.object({
+  "totalRows": zod.number().int(),
+  "changedCount": zod.number().int(),
+  "addedCount": zod.number().int(),
+  "removedCount": zod.number().int(),
+  "unchangedCount": zod.number().int(),
+  "introducedRiskCount": zod.number().int(),
+  "resolvedRiskCount": zod.number().int(),
+  "favorsOtherPartyCount": zod.number().int()
+})
+})
+
+
+/**
+ * @summary Ask a grounded question about a specific document
+ */
+export const AskDocumentQuestionParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+
+
+
+export const AskDocumentQuestionBody = zod.object({
+  "documentId": zod.string(),
+  "question": zod.string().min(1),
+  "perspective": zod.enum(['party_a', 'party_b'])
+})
+
+export const AskDocumentQuestionResponse = zod.object({
+  "answer": zod.string(),
+  "citations": zod.array(zod.object({
+  "clauseId": zod.string(),
+  "label": zod.string()
+})),
+  "groundingRatio": zod.number(),
+  "adviceMode": zod.boolean(),
+  "queued": zod.boolean()
+})
+
+
+/**
  * @summary Ask a grounded question about a document
  */
 

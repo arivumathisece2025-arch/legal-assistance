@@ -117,6 +117,164 @@ export interface AnswerResponse {
   queued: boolean;
 }
 
+/**
+ * Which side the reader is on, used to label which party a change favours.
+ */
+export type CompareVersionsBodyPerspective = typeof CompareVersionsBodyPerspective[keyof typeof CompareVersionsBodyPerspective];
+
+
+export const CompareVersionsBodyPerspective = {
+  both: 'both',
+  party_a: 'party_a',
+  party_b: 'party_b',
+} as const;
+
+export interface CompareVersionsBody {
+  /** Id of the earlier (base) version to compare against. */
+  against: string;
+  /** Which side the reader is on, used to label which party a change favours. */
+  perspective?: CompareVersionsBodyPerspective;
+}
+
+export interface VersionDocumentRef {
+  id: string;
+  name: string;
+}
+
+export interface ClauseRef {
+  id: string;
+  ordinal: string;
+  heading: string;
+  type: string;
+  text: string;
+}
+
+export interface SimilarityBreakdown {
+  headingSimilarity: number;
+  clauseTypeMatch: number;
+  tokenSimilarity: number;
+}
+
+export type MaterialChangeNoteFavors = typeof MaterialChangeNoteFavors[keyof typeof MaterialChangeNoteFavors];
+
+
+export const MaterialChangeNoteFavors = {
+  partyA: 'partyA',
+  partyB: 'partyB',
+  neither: 'neither',
+} as const;
+
+export interface MaterialChangeNote {
+  available: boolean;
+  fromCache: boolean;
+  materiallyChanged: boolean;
+  summary: string;
+  favors: MaterialChangeNoteFavors;
+  rationale: string;
+}
+
+export type FindingChangeStatus = typeof FindingChangeStatus[keyof typeof FindingChangeStatus];
+
+
+export const FindingChangeStatus = {
+  introduced: 'introduced',
+  resolved: 'resolved',
+  changed: 'changed',
+  unchanged: 'unchanged',
+} as const;
+
+export type FindingChangeLabel = typeof FindingChangeLabel[keyof typeof FindingChangeLabel];
+
+
+export const FindingChangeLabel = {
+  Added: 'Added',
+  Removed: 'Removed',
+  Changed: 'Changed',
+} as const;
+
+export type FindingChangeConcerns = typeof FindingChangeConcerns[keyof typeof FindingChangeConcerns];
+
+
+export const FindingChangeConcerns = {
+  partyA: 'partyA',
+  partyB: 'partyB',
+  both: 'both',
+} as const;
+
+export interface FindingChange {
+  status: FindingChangeStatus;
+  label?: FindingChangeLabel;
+  ruleId: string;
+  title: string;
+  severity: RiskSeverity;
+  concerns: FindingChangeConcerns;
+  favorsOtherParty: boolean;
+  message: string;
+  beforeClauseId?: string;
+  afterClauseId?: string;
+}
+
+export type ComparisonRowKind = typeof ComparisonRowKind[keyof typeof ComparisonRowKind];
+
+
+export const ComparisonRowKind = {
+  unchanged: 'unchanged',
+  changed: 'changed',
+  added: 'added',
+  removed: 'removed',
+} as const;
+
+export type ComparisonRowLabelsItem = typeof ComparisonRowLabelsItem[keyof typeof ComparisonRowLabelsItem];
+
+
+export const ComparisonRowLabelsItem = {
+  Added: 'Added',
+  Removed: 'Removed',
+  Changed: 'Changed',
+  Favors_other_party: 'Favors other party',
+} as const;
+
+export interface ComparisonRow {
+  key: string;
+  kind: ComparisonRowKind;
+  similarity: number;
+  labels: ComparisonRowLabelsItem[];
+  before?: ClauseRef;
+  after?: ClauseRef;
+  breakdown?: SimilarityBreakdown;
+  materialChange?: MaterialChangeNote;
+  findingChanges: FindingChange[];
+}
+
+export interface VersionComparisonSummary {
+  totalRows: number;
+  changedCount: number;
+  addedCount: number;
+  removedCount: number;
+  unchangedCount: number;
+  introducedRiskCount: number;
+  resolvedRiskCount: number;
+  favorsOtherPartyCount: number;
+}
+
+export type VersionComparisonPerspective = typeof VersionComparisonPerspective[keyof typeof VersionComparisonPerspective];
+
+
+export const VersionComparisonPerspective = {
+  partyA: 'partyA',
+  partyB: 'partyB',
+  both: 'both',
+} as const;
+
+export interface VersionComparison {
+  base: VersionDocumentRef;
+  revised: VersionDocumentRef;
+  threshold: number;
+  perspective: VersionComparisonPerspective;
+  rows: ComparisonRow[];
+  summary: VersionComparisonSummary;
+}
+
 export type UploadDocumentBody = {
   file: Blob | File;
 };

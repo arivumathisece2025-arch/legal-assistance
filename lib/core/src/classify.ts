@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CLASSIFICATION_PROMPT_VERSION, DEFAULT_LLM_MODEL, getCacheValue, hashCacheKey, setCacheValue } from "./cache";
 import type { Clause } from "./segment";
 import type { LLMProvider } from "./llm/base";
 
@@ -40,12 +41,25 @@ export async function classifyClauses(provider: LLMProvider, clauses: Clause[]):
   const classifications: ClauseClassification[] = [];
   for (let start = 0; start < clauses.length; start += BATCH_SIZE) {
     const batch = clauses.slice(start, start + BATCH_SIZE);
+    const normalizedInput = JSON.stringify(
+      batch.map((clause) => ({ id: clause.id, heading: clause.heading, text: clause.text })),
+    );
+    const cacheKey = hashCacheKey(normalizedInput, DEFAULT_LLM_MODEL, CLASSIFICATION_PROMPT_VERSION);
+    const cachedResult = getCacheValue<ClauseClassification[]>(cacheKey);
+
+    if (cachedResult) {
+      classifications.push(...cachedResult);
+      continue;
+    }
+
     const result = await provider.completeJson(
       "Classify each contract clause into exactly one of the permitted clause types.",
-      JSON.stringify(batch.map((clause) => ({ id: clause.id, heading: clause.heading, text: clause.text }))),
+      normalizedInput,
       classificationSchema,
     );
-    classifications.push(...result.items.map(({ clauseId, type }) => ({ clauseId, type })));
+    const parsed = result.items.map(({ clauseId, type }) => ({ clauseId, type }));
+    setCacheValue(cacheKey, parsed);
+    classifications.push(...parsed);
   }
   return classifications;
 }
