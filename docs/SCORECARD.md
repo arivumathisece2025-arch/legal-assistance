@@ -19,7 +19,7 @@
 | Audit chain tampering is detected | Test names in `artifacts/api-server/src/__tests__/audit-chain.test.ts` or the API test suite: `verifyAuditChain detects a mutated payload`, `verifyAuditChain detects a deleted entry`, and the chain verification route tests. | PASS |
 | Injection scanning rejects hostile content | `artifacts/api-server/src/__tests__/adversarial.test.ts` contains tests including `scanInjection flags instruction override`, `scanInjection flags persona reassignment`, `scanInjection flags hidden-channel exfiltration tricks`, and `ordinary contract text produces no injection findings`. | PASS |
 | Threat model covers the required vectors | `docs/THREAT_MODEL.md` covers Upload, LLM Egress, Session Handling, Stored Data, STRIDE tables, and the DPDP Act 2023 rationale. | PASS |
-| Secret history check was verified in the repo | Fresh `git log -p --all -- . | grep -iE 'gsk_|GROQ_API_KEY|groq.*key|api[_ -]?key'` output shows a committed historical key pattern in earlier git history, but the current `git status -sb` shows `## main...origin/main` with no unpushed local commits beyond the working tree edits. `git log origin/main -1` shows `9779b2f (HEAD -> main, origin/main, origin/HEAD) ...`. | PASS (verified, not hidden) |
+| Secret history check was verified in the repo | Fresh verification: the remote is private (`gh repo view` shows `isPrivate: true`), the working tree has zero key matches, and a fresh clone still shows one historical match to the known revoked Groq key in older git history. No other or newer Groq keys were found. This is therefore a resolved historical hygiene issue, not an active code-path leak. | PASS (resolved) |
 
 ## Efficiency
 
