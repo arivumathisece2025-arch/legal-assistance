@@ -20,8 +20,10 @@ export default defineConfig({
   webServer: [
     {
       // 1. Start the API server. APP_ENCRYPTION_KEY is required by the upload
-      //    path, which refuses to store a document without it.
-      command: 'PORT=3000 APP_ENCRYPTION_KEY=6bd79b85fcddaa9d498f6b83871ad71229730ecf40ce76f0f93f8e85a63c2912 pnpm --filter @workspace/api-server run dev',
+      //    path, which refuses to store a document without it. The fallback is a
+      //    throwaway value for local e2e runs only - set APP_ENCRYPTION_KEY in the
+      //    environment (or a .env file) to use a real one.
+      command: 'PORT=3000 APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:-e2e-test-only-encryption-key} pnpm --filter @workspace/api-server run dev',
       port: 3000,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,

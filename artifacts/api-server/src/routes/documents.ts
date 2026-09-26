@@ -8,9 +8,9 @@ import {
   IngestionError,
   MockProvider,
   processUpload,
-  retrieveClauses,
   type AlignableClause,
   type Clause,
+  type LLMProvider,
 } from "@workspace/core";
 import {
   AnalyzeDocumentParams,
@@ -247,7 +247,50 @@ export function getDocumentRecord(id: string): DocumentRecord | undefined {
   return documents.get(id);
 }
 
+/**
+ * Removes every in-memory document, returning the ids that were dropped.
+ *
+ * The DPDP erasure endpoint calls this so that "delete my data" actually
+ * deletes something rather than reporting success over an untouched store.
+ */
+export function purgeAllDocuments(): string[] {
+  const purged = [...documents.keys()];
+  documents.clear();
+  return purged;
+}
+
+/**
+ * Builds the provider used for grounded document Q&A.
+ *
+ * This used to be an inline object literal that string-concatenated a quote
+ * from the top-ranked clause. It was never an LLM call: it ignored the system
+ * prompt, ignored the configured models, and bypassed nothing useful, because
+ * `answerQuestion` already performs its own retrieval, citation, and grounding
+ * verification. The result was a canned quote presented as a grounded answer.
+ *
+ * Model selection is explicit rather than inherited from `GroqProvider`'s
+ * default, so that "which model answers a user's question" is answerable by
+ * reading this line rather than by inference.
+ */
+function answerProvider(): LLMProvider {
+  if (process.env.MOCK_LLM === "1") {
+    return new MockProvider();
+  }
+
+  const smartModel = process.env.GROQ_MODEL_SMART ?? process.env.GROQ_MODEL_FAST;
+  return new GroqProvider(smartModel ? { model: smartModel } : {});
+}
+
+/**
+ * @param perspective Accepted for API compatibility with both ask routes.
+ *   It is currently unused: the previous inline stub branched on it when
+ *   phrasing its canned quote, and the real provider path does not yet put
+ *   perspective into the system prompt. Threading it into `answerQuestion` is
+ *   a real follow-up, so the parameter is kept rather than silently removed
+ *   from a signature two routes depend on.
+ */
 export async function answerDocumentQuestion(documentId: string, question: string, perspective: "party_a" | "party_b", language: string = "en") {
+  void perspective;
   const document = getDocumentRecord(documentId);
   if (!document) {
     throw new Error("Document not found");
@@ -263,24 +306,7 @@ export async function answerDocumentQuestion(documentId: string, question: strin
     charEnd: clause.text.length,
   }));
 
-  const provider = {
-    async completeJson<T>(_system: string, _user: string, schema: { parse: (value: unknown) => T }): Promise<T> {
-      const candidates = retrieveClauses(clauses, question, 6);
-      if (!candidates.length) {
-        return schema.parse({ answer: "The contract text does not answer that question." }) as T;
-      }
-
-      const topClause = candidates[0];
-      const quote = topClause.text.replace(/\s+/g, " ").trim();
-      const answer = perspective === "party_b"
-        ? `From the document's wording, the relevant clause is ${quote} [${topClause.id}] and it is worth checking how that allocation works in practice.`
-        : `The document states: ${quote} [${topClause.id}]`;
-
-      return schema.parse({ answer }) as T;
-    },
-  };
-
-  const result = await answerQuestion(question, clauses, provider as any, language);
+  const result = await answerQuestion(question, clauses, answerProvider(), language);
   const citations = result.citations.map((clauseId) => {
     const clause = document.clauses.find((candidate) => candidate.id === clauseId);
     return {
@@ -458,7 +484,16 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
       return;
     }
 
-    res.status(404).json({ error: "Document not found" });
+    // A missing document is a 404. Anything else (an unconfigured provider, a
+    // provider outage, a schema-validation failure) is a 500: reporting those
+    // as "Document not found" sent debugging in the wrong direction once
+    // already, masking "GROQ_API_KEY is not configured" as a lookup miss.
+    if (error instanceof Error && error.message === "Document not found") {
+      res.status(404).json({ error: "Document not found" });
+      return;
+    }
+
+    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 

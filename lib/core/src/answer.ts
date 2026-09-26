@@ -12,9 +12,14 @@ export type QuestionAnswer = {
   adviceMode: boolean;
 };
 
-const answerSchema = z.object({
-  answer: z.string(),
-});
+const answerSchema = z
+  .object({
+    answer: z.string(),
+  })
+  // MockProvider derives its fixture filename from this description. Without it
+  // the schema resolves to "default.json", which does not exist, so the mock
+  // path returned `{}` and failed validation with a 500.
+  .describe("answer");
 
 export async function answerQuestion(
   question: string,

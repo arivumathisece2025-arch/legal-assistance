@@ -91,3 +91,66 @@ test("the same document produces different profiles for partyA and partyB", () =
   assert.ok(partyA.findings.some((finding) => finding.ruleId === "asymmetric-termination-rights"));
   assert.ok(partyB.findings.some((finding) => finding.ruleId === "uncapped-indemnity"));
 });
+
+// Regression: the golden set found that rule gating used a private copy of the
+// clause-type heuristic list that had drifted from `align.ts`. These two cases
+// were unreachable before the resolver was shared, because `appliesTo` gated
+// every predicate on the drifted type.
+//
+// Note these deliberately omit `type`, unlike the fixtures above. A declared
+// type is authoritative and short-circuits inference, so `makeClause`'s
+// `"other"` default would hide exactly the drift being pinned here.
+
+test("infers a liability cap from the heading when no type is declared", () => {
+  const clause: RiskClause = {
+    id: "C1",
+    ordinal: "1",
+    heading: "Limitation of Liability",
+    text: "Total liability shall not to exceed $50,000.",
+    page: 1,
+    charStart: 0,
+    charEnd: 44,
+  };
+  assert.equal(clause.type, undefined);
+
+  const findings = evaluateRiskRules([clause], "both");
+  assert.ok(
+    findings.some((finding) => finding.ruleId === "missing-liability-cap"),
+    "a 'Limitation of Liability' heading must reach the liability_cap rules",
+  );
+});
+
+test("recognises 'no end date' as an indefinite confidentiality duty", () => {
+  const clause: RiskClause = {
+    id: "C1",
+    ordinal: "1",
+    heading: "Confidentiality",
+    text: "Confidential Information has no end date.",
+    page: 1,
+    charStart: 0,
+    charEnd: 43,
+  };
+
+  const findings = evaluateRiskRules([clause], "both");
+
+  assert.ok(
+    findings.some((finding) => finding.ruleId === "confidentiality-no-end-date"),
+    "'no end date' is as indefinite as 'without end date'",
+  );
+});
+
+test("a bounded confidentiality term is not reported as indefinite", () => {
+  const clause: RiskClause = {
+    id: "C1",
+    ordinal: "1",
+    heading: "Confidentiality",
+    text: "Confidential Information is protected for 3 years after disclosure.",
+    page: 1,
+    charStart: 0,
+    charEnd: 65,
+  };
+
+  const findings = evaluateRiskRules([clause], "both");
+
+  assert.equal(findings.some((finding) => finding.ruleId === "confidentiality-no-end-date"), false);
+});

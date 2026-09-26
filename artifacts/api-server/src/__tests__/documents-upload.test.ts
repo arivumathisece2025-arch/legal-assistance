@@ -4,7 +4,12 @@ import test from "node:test";
 import { deflateRawSync } from "node:zlib";
 
 process.env.APP_ENCRYPTION_KEY = "integration-test-key";
+// The grounded-Q&A route resolves a real provider (GroqProvider unless
+// MOCK_LLM=1). The ask test below stubs the provider's completeJson so the
+// returned answer is genuinely grounded in the uploaded clause - asserting on
+// canned mock text would test the fixture, not the grounding.
 const { default: app } = await import("../app");
+const { GroqProvider } = await import("@workspace/core");
 
 function makePdf(text: string): Uint8Array {
   const escaped = text.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
@@ -155,9 +160,37 @@ test("scanned PDF upload returns a typed error instead of empty text", async () 
 });
 
 test("uploading a real document and asking a grounded question returns a grounded answer", async () => {
-  await withServer(async (baseUrl) => {
+  // Stub the provider, not the whole route, so retrieval, citation extraction,
+  // and grounding verification all still run for real.
+  const originalCompleteJson = GroqProvider.prototype.completeJson;
+  const originalKey = process.env.GROQ_API_KEY;
+  process.env.GROQ_API_KEY = "test-key-not-a-real-credential";
+  delete process.env.MOCK_LLM;
+
+  GroqProvider.prototype.completeJson = async function (
+    _system: string,
+    user: string,
+    schema: { parse: (value: unknown) => unknown },
+  ) {
+    // Quote the retrieved clause back, as a grounded model would, and cite the
+    // real clause id from the context. verifyGroundedAnswer only keeps
+    // citations that exist in the clause list, so a hardcoded id would be
+    // stripped and the test would assert against an empty citation list.
+    const context = /Data:\n([\s\S]*)/.exec(user)?.[1] ?? "";
+    const clauseId = /\[([^\]]+)\]/.exec(context)?.[1] ?? "";
+    return schema.parse({
+      answer: `Client may terminate for convenience on thirty days notice. [${clauseId}]`,
+    }) as never;
+  };
+
+  try {
+    await withServer(async (baseUrl) => {
     const form = new FormData();
-    const documentText = "TERMINATION Client may terminate this Agreement for convenience upon thirty (30) days' written notice.";
+    // Numbered form ("1. Termination. ...") so segmentDocument actually finds a
+    // clause. The previous all-caps one-liner produced zero clauses, and the
+    // test only ever passed because the route short-circuited retrieval with a
+    // hardcoded quote; with real retrieval there is nothing to cite.
+    const documentText = "1. Termination. Client may terminate this Agreement for convenience upon thirty (30) days' written notice.";
     form.append("file", asBlob(makePdf(documentText)), "termination.pdf");
     const uploadResponse = await fetch(`${baseUrl}/api/documents/upload`, { method: "POST", body: form });
     const uploadBody = (await uploadResponse.json()) as { id: string; clauses: Array<{ id: string; text: string }> };
@@ -178,7 +211,12 @@ test("uploading a real document and asking a grounded question returns a grounde
     assert.ok(askBody.citations.length > 0);
     assert.equal(typeof askBody.groundingRatio, "number");
     assert.ok(askBody.groundingRatio >= 0);
-  });
+    });
+  } finally {
+    GroqProvider.prototype.completeJson = originalCompleteJson;
+    if (originalKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = originalKey;
+  }
 });
 
 test("audio transcription route forwards the configured whisper model and requested language", async () => {
@@ -193,8 +231,11 @@ test("audio transcription route forwards the configured whisper model and reques
   const route = (audioRouter as any).stack.find((layer: any) => layer.route?.path === "/audio/transcribe");
   const handler = route.route.stack[route.route.stack.length - 1].handle;
 
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-    const payload = init?.body ? await new Response(init.body as BodyInit).text() : "";
+  // `lib` is ["es2022"] with no DOM, so DOM aliases like RequestInfo/BodyInit
+  // are not in scope. The Node/undici equivalents are, and this is a test that
+  // only runs under Node.
+  globalThis.fetch = (async (_input: string | URL, init?: { body?: unknown }) => {
+    const payload = init?.body ? await new Response(init.body as string).text() : "";
     assert.match(payload, /whisper-test-model/);
     assert.match(payload, /hi/);
     return new Response(JSON.stringify({ text: "नमस्ते" }), {

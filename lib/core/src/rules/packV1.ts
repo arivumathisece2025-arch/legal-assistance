@@ -1,5 +1,6 @@
 import type { Clause } from "../segment";
 import type { ClauseType } from "../classify";
+import { resolveClauseType } from "../align";
 
 export type RiskSeverity = "low" | "medium" | "high";
 export type RiskPerspective = "partyA" | "partyB" | "both";
@@ -37,47 +38,18 @@ export type RiskProfile = {
   riskScore: number;
 };
 
-const ALL_CLAUSE_TYPES = [
-  "payment",
-  "termination",
-  "indemnity",
-  "liability_cap",
-  "confidentiality",
-  "ip_ownership",
-  "non_compete",
-  "arbitration",
-  "jurisdiction",
-  "auto_renewal",
-  "data_privacy",
-  "force_majeure",
-  "assignment",
-  "warranty",
-  "other",
-] as const satisfies readonly ClauseType[];
-
+/**
+ * Rule gating uses the same resolver as the rest of the pipeline.
+ *
+ * This used to be a second, private copy of the heuristic list. The two copies
+ * drifted: packV1's version required a literal "cap" to recognise
+ * "Limitation of Liability" as a liability cap, while `align.ts` resolved the
+ * same heading correctly. Because `appliesTo` gates every predicate, a clause
+ * typed `other` here meant rules like `missing-liability-cap` could never fire,
+ * and the drift was invisible until the golden set exercised it.
+ */
 function getClauseType(clause: RiskClause): ClauseType {
-  const direct = clause.type;
-  if (typeof direct === "string") {
-    if ((ALL_CLAUSE_TYPES as readonly string[]).includes(direct)) {
-      return direct as ClauseType;
-    }
-  }
-
-  const heading = `${clause.heading} ${clause.text}`.toLowerCase();
-  if (/indemn/i.test(heading)) return "indemnity";
-  if (/liability cap|cap on liability|liability.*cap/i.test(heading)) return "liability_cap";
-  if (/non[- ]?compete|restrictive covenant/i.test(heading)) return "non_compete";
-  if (/auto[- ]?renew|renewal/i.test(heading)) return "auto_renewal";
-  if (/arbit/i.test(heading)) return "arbitration";
-  if (/payment|invoice|fees|remuneration/i.test(heading)) return "payment";
-  if (/terminate|termination/i.test(heading)) return "termination";
-  if (/assignment|ip|intellectual property|ownership/i.test(heading)) return "ip_ownership";
-  if (/confidential|non[- ]?disclosure/i.test(heading)) return "confidentiality";
-  if (/governing law|jurisdiction|law.*courts|courts.*law/i.test(heading)) return "jurisdiction";
-  if (/privacy|data sharing|personal data|processing|third party/i.test(heading)) return "data_privacy";
-  if (/force majeure|event of force/i.test(heading)) return "force_majeure";
-  if (/assignment|assign/i.test(heading)) return "assignment";
-  return "other";
+  return resolveClauseType(clause);
 }
 
 function textOf(clause: RiskClause): string {
@@ -215,7 +187,7 @@ export function packV1Rules(): RiskRule[] {
       title: "Confidentiality with no end date",
       severity: "medium",
       appliesTo: ["confidentiality"],
-      predicate: (clause) => /confidential.*(permanent|forever|indefinite|without end date|no expiry|for all time|never expires)/i.test(textOf(clause)) || /shall remain confidential for all time/i.test(textOf(clause)),
+      predicate: (clause) => /confidential.*(permanent|forever|indefinite|without end date|no end date|no expiry|for all time|never expires)/i.test(textOf(clause)) || /shall remain confidential for all time/i.test(textOf(clause)),
       explanationTemplate: "The confidentiality duty in {clauseHeading} is indefinite, which can materially outlast the commercial relationship and create unexpected obligations.",
       askYourLawyer: "What is the sensible confidentiality period after termination and does the contract need a sunset for trade secrets and know-how?",
       perspective: "partyA",

@@ -7,6 +7,8 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "test": "pnpm --filter @workspace/core test && pnpm --filter @workspace/api-server test",
     "test:e2e": "playwright test",
+    "bench:eval": "artifacts/api-server/node_modules/.bin/tsx benchmarks/eval.ts",
+    "bench:perf": "artifacts/api-server/node_modules/.bin/tsx benchmarks/perf.ts",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
