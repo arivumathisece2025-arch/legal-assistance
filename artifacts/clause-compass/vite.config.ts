@@ -7,25 +7,17 @@ import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
 const rawPort = process.env.PORT;
 
-if (!rawPort) {
-  throw new Error(
-    'PORT environment variable is required but was not provided.',
-  );
-}
-
-const port = Number(rawPort);
+// PORT and BASE_PATH are only required for dev/preview servers.
+// During a production `vite build` they are unused, so fall back to defaults
+// instead of throwing to avoid breaking CI/CD pipelines (Vercel, Render, etc.).
+const port = rawPort ? Number(rawPort) : 5173;
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
+const basePath = process.env.BASE_PATH ?? '/';
 
-if (!basePath) {
-  throw new Error(
-    'BASE_PATH environment variable is required but was not provided.',
-  );
-}
 
 // The API server runs as a separate process, so the SPA's relative `/api/*`
 // requests have to be forwarded to it for both `dev` and `preview`.

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: clause-compass-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build
+    startCommand: node artifacts/api-server/dist/index.mjs
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # set manually in Render dashboard
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL_SMART
+        value: llama-3.1-70b-versatile
+      - key: GROQ_MODEL_FAST
+        value: llama-3.1-8b-instant
+      - key: GROQ_MODEL_AUDIO
+        value: distil-whisper-large-v3-en
+      - key: APP_ENCRYPTION_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false # set to your Vercel domain after deploy
