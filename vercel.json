@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "buildCommand": "cd ../.. && corepack enable && pnpm install --frozen-lockfile && pnpm run typecheck:libs && pnpm --filter @workspace/clause-compass build",
-  "outputDirectory": "dist/public",
-  "installCommand": "echo 'Install handled in buildCommand'",
+  "installCommand": "corepack enable && pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm run typecheck:libs && pnpm --filter @workspace/clause-compass build",
+  "outputDirectory": "artifacts/clause-compass/dist/public",
   "rewrites": [
     {
       "source": "/api/:path*",
