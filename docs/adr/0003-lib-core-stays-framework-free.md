@@ -1,54 +1,40 @@
-# ADR 0003: `lib/core` has zero imports from `artifacts/*`
+# ADR 0003: lib/core has zero imports from artifacts/*
 
 ## Status
 Accepted
 
 ## Context
-Domain logic (segmentation, classification, the rule engine, retrieval, citation
-verification, obligations, simplification, alignment, and the PII and injection
-guards) needs to be testable in isolation and reusable regardless of which
-transport or UI calls into it.
+Domain logic (segmentation, classification, the rule engine, retrieval,
+verification, obligations, exports, simplification, alignment) needs to be
+testable in isolation and reusable regardless of which transport layer or
+frontend calls into it.
 
 ## Decision
-`lib/core` is a separate pnpm workspace package containing pure TypeScript with no
-imports from `artifacts/api-server` or `artifacts/clause-compass`, and no
-framework dependencies.
-
-This is enforced mechanically, not by convention.
-`lib/core/src/__tests__/architecture.test.ts` walks every `.ts` file under
-`lib/core`, matches any `from "…artifacts/…"` or `import "…artifacts/…"`, and
-fails with the list of offending files if any match:
-
-```ts
-assert.deepEqual(offenders, []);
-```
+`lib/core` is a separate pnpm workspace package (plain pnpm workspaces —
+no Turborepo) containing only pure TypeScript, with no imports from
+`artifacts/api-server` or `artifacts/clause-compass`, and no framework
+dependencies. This is enforced mechanically: an architecture test walks the
+import graph and fails the build if `lib/core` ever imports from
+`artifacts/*`.
 
 ## Why
-Without the boundary, business logic accumulates inside route handlers. That
-makes it slower to test — standing up an HTTP server to check a date-resolution
-function — and harder to reuse, because the logic takes on Express's
-request/response shape. Keeping the core pure means each piece of domain logic has
-direct, fast, dependency-free unit tests.
-
-The cost of the boundary is that provider selection lives outside the core. That
-is where the Q&A regression came from: `answerQuestion` is pure and takes a
-provider, but the route that builds that provider is not, and the route was
-passing a stub. The architecture test could not have caught it, and a boundary
-test should not be mistaken for a behaviour test.
+Without this boundary, business logic tends to accumulate inside route
+handlers, coupling it to Express's request/response shape and making it
+slower to test. Keeping `lib/core` pure means every piece of domain logic —
+the PII redactor, the injection scanner, every risk rule, the citation
+verifier — has direct, dependency-free unit tests, using Node's built-in
+test runner (`tsx --test`), not an external test framework. As of the last
+verified run: 130 tests total (77 in `@workspace/core`, 53 in
+`@workspace/api-server`), all passing.
 
 ## Alternatives considered
-- **Logic inline in Express route handlers.** Rejected: the default failure mode
-  for API-first projects, and the reason the rule engine and verifier are
-  separately testable today.
-- **A `services/` layer importing both core and Express.** Acceptable for wiring
-  only. The route calls into `lib/core`; it does not reimplement anything, and
-  the core never imports back.
+- **Logic inline in Express route handlers**: rejected — the default
+  failure mode for API-first projects, explicitly avoided from the
+  reconciliation step that consolidated this repo onto one stack.
+- **A services/ layer importing both core and Express**: this exists for
+  wiring only — routes call into `lib/core` functions, but `lib/core`
+  never imports back.
 
 ## Consequences
-- Every new domain feature is added to `lib/core` first, as a pure function with
-  its own tests, then wired into a route.
-- Anything needing environment or transport — a provider, a database handle, a
-  request object — must be passed in. This is a real constraint and it is exactly
-  the seam where the Q&A bug lived.
-- The architecture test is cheap and runs in the ordinary `lib/core` suite, so
-  the boundary cannot rot silently.
+Every new domain feature is added to `lib/core` first, as a pure function
+with its own tests, before being wired into a route.
