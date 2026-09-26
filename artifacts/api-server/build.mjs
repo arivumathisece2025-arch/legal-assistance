@@ -136,6 +136,123 @@ if (typeof globalThis.ImageData === "undefined") {
     `,
     },
   });
+
+  const vercelApiDir = path.resolve(artifactDir, "../../api");
+  await esbuild({
+    entryPoints: [path.resolve(artifactDir, "src/app.ts")],
+    platform: "node",
+    bundle: true,
+    format: "esm",
+    outdir: vercelApiDir,
+    outExtension: { ".js": ".mjs" },
+    logLevel: "info",
+    external: [
+      "*.node",
+      "sharp",
+      "better-sqlite3",
+      "sqlite3",
+      "canvas",
+      "bcrypt",
+      "argon2",
+      "fsevents",
+      "re2",
+      "farmhash",
+      "xxhash-addon",
+      "bufferutil",
+      "utf-8-validate",
+      "ssh2",
+      "cpu-features",
+      "dtrace-provider",
+      "isolated-vm",
+      "lightningcss",
+      "pg-native",
+      "oracledb",
+      "mongodb-client-encryption",
+      "nodemailer",
+      "handlebars",
+      "knex",
+      "typeorm",
+      "protobufjs",
+      "onnxruntime-node",
+      "@tensorflow/*",
+      "@prisma/client",
+      "@mikro-orm/*",
+      "@grpc/*",
+      "@swc/*",
+      "@aws-sdk/*",
+      "@azure/*",
+      "@opentelemetry/*",
+      "@google-cloud/*",
+      "@google/*",
+      "googleapis",
+      "firebase-admin",
+      "@parcel/watcher",
+      "@sentry/profiling-node",
+      "@tree-sitter/*",
+      "aws-sdk",
+      "classic-level",
+      "dd-trace",
+      "ffi-napi",
+      "grpc",
+      "hiredis",
+      "kerberos",
+      "leveldown",
+      "miniflare",
+      "mysql2",
+      "newrelic",
+      "odbc",
+      "piscina",
+      "realm",
+      "ref-napi",
+      "rocksdb",
+      "sass-embedded",
+      "sequelize",
+      "serialport",
+      "snappy",
+      "tinypool",
+      "usb",
+      "workerd",
+      "wrangler",
+      "zeromq",
+      "zeromq-prebuilt",
+      "playwright",
+      "puppeteer",
+      "puppeteer-core",
+      "electron",
+    ],
+    sourcemap: false,
+    plugins: [
+      esbuildPluginPino({ transports: ["pino-pretty"] })
+    ],
+    banner: {
+      js: `import { createRequire as __bannerCrReq } from 'node:module';
+import __bannerPath from 'node:path';
+import __bannerUrl from 'node:url';
+
+globalThis.require = __bannerCrReq(import.meta.url);
+globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
+globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
+
+if (typeof globalThis.DOMMatrix === "undefined") {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor() {
+      this.a = 1; this.b = 0; this.c = 0; this.d = 1; this.e = 0; this.f = 0;
+      this.m11 = 1; this.m12 = 0; this.m13 = 0; this.m14 = 0;
+      this.m21 = 0; this.m22 = 1; this.m23 = 0; this.m24 = 0;
+      this.m31 = 0; this.m32 = 0; this.m33 = 1; this.m34 = 0;
+      this.m41 = 0; this.m42 = 0; this.m43 = 0; this.m44 = 1;
+    }
+  };
+}
+if (typeof globalThis.Path2D === "undefined") {
+  globalThis.Path2D = class Path2D {};
+}
+if (typeof globalThis.ImageData === "undefined") {
+  globalThis.ImageData = class ImageData {};
+}
+`,
+    },
+  });
 }
 
 buildAll().catch((err) => {

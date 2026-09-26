@@ -2,12 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "corepack enable && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm run typecheck:libs && pnpm --filter @workspace/clause-compass build",
+  "buildCommand": "pnpm run typecheck:libs && pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/clause-compass build",
   "outputDirectory": "artifacts/clause-compass/dist/public",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://clause-compass-api.onrender.com/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "/api"
     }
   ]
 }
