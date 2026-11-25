@@ -66,9 +66,7 @@ export default function LawyerPrepBriefPage() {
           </div>
           <BookOpen size={18} color="hsl(var(--primary))" />
         </div>
-        <pre className="cc-brief-content">
-          {brief}
-        </pre>
+        <pre className="cc-brief-content">{brief}</pre>
       </section>
     </main>
   );
