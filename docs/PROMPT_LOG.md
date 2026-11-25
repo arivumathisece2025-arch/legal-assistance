@@ -105,7 +105,7 @@ the whole citation system depends on them. Unit test against 6 differently-forma
 fixture contracts.
 
 LLM LAYER (backend/app/services/llm/):
-`GroqProvider.complete_json(system, user, schema)` — calls Groq chat completions with
+GroqProvider.complete_json(system, user, schema) — calls Groq chat completions with
 response_format json_object, validates the result against a Pydantic schema, and retries
 ONCE with the validation error appended if parsing fails. After two failures, raise a
 typed error. Never return unvalidated model output.
@@ -280,7 +280,7 @@ Take the whole frontend to WCAG 2.2 AA. Do not add features in this phase.
   loss of content or function. Add a dyslexia-friendly font toggle.
 - All form inputs labelled, errors associated via aria-describedby, error summary focused
   on submit failure.
-- Add an /accessibility page stating conformance level and known gaps.
+- Add an /accessibility page stating conformance level and known gaps honestly.
 
 Then add axe-core to the Playwright suite and make accessibility violations FAIL CI.
 Fix everything it reports.
