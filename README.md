@@ -17,7 +17,7 @@ document. It informs the user and never replaces legal advice.
 | Understand prompts | Broke the task into 13 phased prompts (0-12). Each one fixes the stack, defines a "Done when" check, and ends with a rule to paste real command output. At runtime, system prompts restrict answers to retrieved clauses, require `[C#]` citations, and treat document text as data, not instructions. | [`docs/PROMPT_LOG.md`](docs/PROMPT_LOG.md), `lib/core/src/answer.ts`, `lib/core/src/adviceGate.ts` |
 | Use AI tools effectively | Replit Agent built the app phase by phase. Groq models run in two tiers: a fast model for batched clause classification, a smart model for answers, simplification and comparison. Calls are batched (25 clauses per call), cached, retried and time-limited, and a mock provider runs the whole pipeline offline. | [`docs/GENAI_SERVICES.md`](docs/GENAI_SERVICES.md), [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) |
 | Think creatively | Risk scoring is deterministic code and the LLM only handles language ([ADR 0002](docs/adr/0002-deterministic-rules-over-llm-judgment.md)). A citation verifier strips unsupported claims. An advice gate turns "should I sign?" into an information question. Voice questions work in English, Tamil and Hindi. A hash-chained audit log detects tampering. The golden set keeps its one failing case instead of being tuned away. | [ADRs](docs/adr/), `lib/core/src/verify.ts` |
-| Solve the assigned task | Upload and parse contracts (PDF, DOCX, text), plain-language simplification, risk flags, grounded Q&A with citations, version comparison, a Lawyer Prep Brief, and data deletion. | `lib/api-spec/openapi.yaml`, [`docs/SCORECARD.md`](docs/SCORECARD.md) |
+| Solve the assigned task | Upload and parse contracts (PDF, DOCX, text), plain-language simplification, risk flags, grounded Q&A with citations, version comparison, a Lawyer Prep Brief, and data deletion. | `artifacts/clause-compass/src/pages/brief.tsx`, `artifacts/api-server/src/routes/dataDeletion.ts`, `lib/api-spec/openapi.yaml` |
 
 ## Where AI output was wrong and I corrected it
 
@@ -67,7 +67,7 @@ A pnpm workspace with a strict separation of concerns:
 ### Code quality
 - Pure core: domain logic is unit-tested without an HTTP server.
 - Architecture boundary enforced by an import-graph test.
-- Strict TypeScript across the workspace (TypeScript 5.9).
+- Strict TypeScript across the workspace, with unused locals and parameters checked (TypeScript 5.9).
 
 ### Security
 - HMAC-signed session cookies, `httpOnly` and `SameSite=Strict`.
@@ -92,19 +92,25 @@ A pnpm workspace with a strict separation of concerns:
 - `MOCK_LLM=1` runs the pipeline offline through the mock provider.
 
 ### Testing
-- **185 tests, all passing in the latest `pnpm test` run**: 98 in `lib/core`, 87
+- **189 tests, all passing in the latest `pnpm test` run**: 98 in `lib/core`, 91
   in `api-server`. `scripts/run-tests.mjs` discovers source tests and invokes
   Node's test runner with `tsx`; the project does not use Vitest.
+- `pnpm run test:coverage` reports measured line/branch coverage: `lib/core` 94.45% / 84.34%; `api-server` 89.76% / 80.09%.
 - Adversarial and security suites covering session forgery, CSRF, rate limits,
   audit tampering, and data deletion.
 - **Golden set**: 14 synthetic contracts with hand-written answer keys
   (`benchmarks/`), scoring clause-type F1, rule precision/recall/F1, and citation
   accuracy against the real pipeline.
-- Accessibility: `e2e/accessibility.spec.ts` runs 7 Playwright + axe-core tests
-  against rendered content.
+- Accessibility: `e2e/accessibility.spec.ts` runs 12 Playwright checks, including
+  axe-core for the document, Simplify panel, Lawyer Prep Brief, comparison, and
+  accessibility views; keyboard reachability, reduced motion, and primary-button
+  target sizing are also checked.
+- `pnpm run lint` passes ESLint; `pnpm run format:check` checks the task-maintained
+  configuration and frontend files. CI also runs typecheck, tests, production
+  dependency audit, build, and Playwright.
 
 ## Tech stack
-- Node.js, TypeScript 5.9, pnpm workspaces
+- Node.js 24, TypeScript 5.9, pnpm workspaces
 - Express 5, Zod, Drizzle ORM, Pino
 - React, Vite, Tailwind CSS, Lucide
 - Groq API (chat completions and audio transcription)
@@ -115,7 +121,10 @@ A pnpm workspace with a strict separation of concerns:
 ```bash
 pnpm install
 cp .env.example .env      # set GROQ_API_KEY and replace the encryption-key placeholder
-pnpm test                 # 185 unit/integration tests (latest verified count)
+pnpm test                 # 189 unit/integration tests (latest verified count)
+pnpm run test:coverage    # measured line and branch coverage by package
+pnpm run lint             # ESLint
+pnpm run format:check     # Prettier check for maintained files
 pnpm run bench:eval       # golden-set metrics
 pnpm run bench:perf       # measured timings -> benchmarks/RESULTS.md
 pnpm exec playwright test # accessibility e2e
@@ -163,6 +172,10 @@ names them.
    been rewritten; this pass does not claim that historical exposure is
    resolved. Treat those values as exposed and verify provider-side revocation.
    See [THREAT_MODEL.md](docs/THREAT_MODEL.md).
+7. **Delete-data confirmation UI.** The owner-scoped deletion API exists, but
+   the application has no delete-data confirmation dialog. Escape-to-close is
+   therefore not covered for an application dialog flow; this pass kept
+   application UI behavior unchanged.
 
 ## Documentation
 - [ADR 0001: BM25 over embeddings](docs/adr/0001-bm25-over-embeddings.md)
@@ -173,3 +186,4 @@ names them.
 - [GenAI services matrix](docs/GENAI_SERVICES.md)
 - [Demo runbook](docs/DEMO_RUNBOOK.md)
 - [Threat model](docs/THREAT_MODEL.md)
+- [Security policy](SECURITY.md)

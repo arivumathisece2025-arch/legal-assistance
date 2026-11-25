@@ -1,7 +1,8 @@
 # GenAI services used, and where
 
-This table reflects the verified routing in the current repo: `answerProvider` is
-constructed in [artifacts/api-server/src/documents/qa.ts](../artifacts/api-server/src/documents/qa.ts), where `GROQ_MODEL_SMART` is selected with a `GROQ_MODEL_FAST` fallback; the comparison provider is configured in [artifacts/api-server/src/documents/compare.ts](../artifacts/api-server/src/documents/compare.ts).
+This table reflects the verified routing in the current repo: `answerProvider`,
+`versionDiffProvider`, and the shared `groqProvider` are constructed in
+[artifacts/api-server/src/documents/providers.ts](../artifacts/api-server/src/documents/providers.ts), where `GROQ_MODEL_SMART` is selected with a `GROQ_MODEL_FAST` fallback.
 
 | Service | Env var | Called from | Purpose |
 |---|---|---|---|
