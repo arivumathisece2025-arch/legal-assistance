@@ -1,5 +1,6 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { RequestHandler } from "express";
+import { getKey } from "../lib/keys";
 
 export const SESSION_COOKIE = "cc_session";
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
@@ -10,16 +11,12 @@ export type SessionData = {
   issuedAt: number;
 };
 
-function sessionSecret(): string {
-  const secret = process.env.APP_ENCRYPTION_KEY;
-  if (!secret) {
-    throw new Error("APP_ENCRYPTION_KEY must be configured before issuing sessions.");
-  }
-  return secret;
+function signingKey(): Buffer {
+  return getKey("session-hmac");
 }
 
 function sign(payload: string): string {
-  return createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
+  return createHmac("sha256", signingKey()).update(payload).digest("base64url");
 }
 
 function constantTimeEquals(a: string, b: string): boolean {
@@ -113,7 +110,7 @@ export const sessionMiddleware: RequestHandler = (req, res, next) => {
   }
 
   if (!session) {
-    session = createSession("anonymous");
+    session = createSession(randomUUID());
   }
 
   req.session = session;

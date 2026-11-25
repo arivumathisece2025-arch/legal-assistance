@@ -1,6 +1,7 @@
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
 import multer from "multer";
 import { Router, type IRouter } from "express";
+import { getKey } from "../lib/keys";
 import {
   answerQuestion,
   compareVersions,
@@ -29,6 +30,7 @@ import {
 
 type DocumentRecord = {
   id: string;
+  ownerId: string;
   name: string;
   fileType: string;
   uploadedAt: string;
@@ -70,7 +72,7 @@ const upload = multer({
 function encryptBlob(bytes: Uint8Array): string {
   const secret = process.env.APP_ENCRYPTION_KEY;
   if (!secret) throw new Error("APP_ENCRYPTION_KEY must be configured before storing uploads.");
-  const key = createHash("sha256").update(secret).digest();
+  const key = getKey("blob-aes");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const ciphertext = Buffer.concat([cipher.update(bytes), cipher.final()]);
@@ -80,10 +82,9 @@ function encryptBlob(bytes: Uint8Array): string {
 async function persistEncryptedDocument(document: DocumentRecord, encryptedBlob: string, expiresAt: string): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   const { db, storedDocuments } = await import("@workspace/db");
-  const { lt } = await import("drizzle-orm");
-  await db.delete(storedDocuments).where(lt(storedDocuments.expiresAt, new Date()));
   await db.insert(storedDocuments).values({
     id: document.id,
+    ownerId: document.ownerId,
     name: document.name,
     fileType: document.fileType,
     encryptedBlob,
@@ -104,6 +105,7 @@ function toPublicDocument(document: DocumentRecord): Omit<DocumentRecord, "encry
 
 const seedDocument: DocumentRecord = {
   id: "doc-001",
+  ownerId: "public",
   name: "Northstar Services Agreement",
   fileType: "PDF",
   uploadedAt: "2026-09-21T08:30:00.000Z",
@@ -172,6 +174,7 @@ const seedDocument: DocumentRecord = {
 
 const seedRevisedDocument: DocumentRecord = {
   id: "doc-002",
+  ownerId: "public",
   name: "Northstar Services Agreement (revised)",
   fileType: "PDF",
   uploadedAt: "2026-09-22T10:05:00.000Z",
@@ -248,14 +251,39 @@ export function getDocumentRecord(id: string): DocumentRecord | undefined {
 }
 
 /**
- * Removes every in-memory document, returning the ids that were dropped.
+ * Returns the document record only if the caller may access it:
+ * `ownerId === userId` or the document is owned by "public" (readable by everyone).
+ * Returns undefined (not 403) when inaccessible, so callers can respond with 404.
  *
- * The DPDP erasure endpoint calls this so that "delete my data" actually
- * deletes something rather than reporting success over an untouched store.
+ * An expired record is treated as not found and removed from the store.
  */
-export function purgeAllDocuments(): string[] {
-  const purged = [...documents.keys()];
-  documents.clear();
+export function getAccessibleDocument(id: string, userId: string): DocumentRecord | undefined {
+  const document = documents.get(id);
+  if (!document) return undefined;
+
+  if (document.expiresAt && Date.now() > new Date(document.expiresAt).getTime()) {
+    documents.delete(id);
+    return undefined;
+  }
+
+  if (document.ownerId === userId || document.ownerId === "public") {
+    return document;
+  }
+  return undefined;
+}
+
+/**
+ * Removes every in-memory document owned by `userId`, returning the ids that were dropped.
+ * Public ("ownerId === 'public'") documents are never removed by this call.
+ */
+export function purgeDocumentsFor(userId: string): string[] {
+  const purged: string[] = [];
+  for (const [id, document] of documents) {
+    if (document.ownerId === userId) {
+      documents.delete(id);
+      purged.push(id);
+    }
+  }
   return purged;
 }
 
@@ -289,9 +317,9 @@ function answerProvider(): LLMProvider {
  *   a real follow-up, so the parameter is kept rather than silently removed
  *   from a signature two routes depend on.
  */
-export async function answerDocumentQuestion(documentId: string, question: string, perspective: "party_a" | "party_b", language: string = "en") {
+export async function answerDocumentQuestion(documentId: string, userId: string, question: string, perspective: "party_a" | "party_b", language: string = "en") {
   void perspective;
-  const document = getDocumentRecord(documentId);
+  const document = getAccessibleDocument(documentId, userId);
   if (!document) {
     throw new Error("Document not found");
   }
@@ -326,11 +354,14 @@ export async function answerDocumentQuestion(documentId: string, question: strin
 
 const router: IRouter = Router();
 
-router.get("/documents", (_req, res) => {
-  const response = Array.from(documents.values()).map((document) => {
-    const { clauses: _clauses, ...summary } = toPublicDocument(document);
-    return summary;
-  });
+router.get("/documents", (req, res) => {
+  const userId = req.session?.userId ?? "";
+  const response = Array.from(documents.values())
+    .filter((document) => document.ownerId === "public" || document.ownerId === userId)
+    .map((document) => {
+      const { clauses: _clauses, ...summary } = toPublicDocument(document);
+      return summary;
+    });
   res.json(ListDocumentsResponse.parse(response));
 });
 
@@ -350,9 +381,10 @@ router.post("/documents/upload", (req, res, next): void => {
 
   try {
     const processed = await processUpload(req.file.buffer);
-    const id = `doc-${Date.now()}`;
+    const id = `doc-${randomUUID()}`;
     const uploadedAt = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const ownerId = req.session?.userId ?? "public";
     const clauses = processed.redactedPages.map((page) => ({
       id: `P${page.pageNumber}`,
       ordinal: String(page.pageNumber),
@@ -364,6 +396,7 @@ router.post("/documents/upload", (req, res, next): void => {
     }));
     const document: DocumentRecord = {
       id,
+      ownerId,
       name: req.file.originalname,
       fileType: processed.fileType.toUpperCase(),
       uploadedAt,
@@ -403,9 +436,10 @@ router.post("/documents", (req, res): void => {
     return;
   }
 
-  const id = `doc-${Date.now()}`;
+  const id = `doc-${randomUUID()}`;
   const document: DocumentRecord = {
     id,
+    ownerId: req.session?.userId ?? "public",
     name: parsed.data.name,
     fileType: parsed.data.fileType.toUpperCase(),
     uploadedAt: new Date().toISOString(),
@@ -431,7 +465,7 @@ router.get("/documents/:id", (req, res): void => {
     return;
   }
 
-  const document = documents.get(params.data.id);
+  const document = getAccessibleDocument(params.data.id, req.session?.userId ?? "");
   if (!document) {
     res.status(404).json({ error: "Document not found" });
     return;
@@ -444,6 +478,12 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
   const params = GetDocumentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const document = getAccessibleDocument(params.data.id, req.session?.userId ?? "");
+  if (!document) {
+    res.status(404).json({ error: "Document not found" });
     return;
   }
 
@@ -467,7 +507,7 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
   }
 
   try {
-    const result = await answerDocumentQuestion(parsed.data.documentId, parsed.data.question, parsed.data.perspective, "en");
+    const result = await answerDocumentQuestion(parsed.data.documentId, req.session?.userId ?? "", parsed.data.question, parsed.data.perspective, "en");
 
     if (wantsSse) {
       res.write(`event: answer\ndata: ${JSON.stringify(result)}\n\n`);
@@ -479,21 +519,17 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
     res.json(result);
   } catch (error) {
     if (wantsSse) {
-      res.write(`event: error\ndata: ${JSON.stringify({ message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+      res.write(`event: error\ndata: ${JSON.stringify({ message: "Answer could not be generated." })}\n\n`);
       res.end();
       return;
     }
 
-    // A missing document is a 404. Anything else (an unconfigured provider, a
-    // provider outage, a schema-validation failure) is a 500: reporting those
-    // as "Document not found" sent debugging in the wrong direction once
-    // already, masking "GROQ_API_KEY is not configured" as a lookup miss.
     if (error instanceof Error && error.message === "Document not found") {
       res.status(404).json({ error: "Document not found" });
       return;
     }
 
-    res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    res.status(500).json({ code: "ASK_FAILED", message: "Answer could not be generated." });
   }
 });
 
@@ -534,8 +570,9 @@ router.post("/documents/:id/compare", async (req, res): Promise<void> => {
     return;
   }
 
-  const revisedDocument = documents.get(params.data.id);
-  const baseDocument = documents.get(body.data.against);
+  const userId = req.session?.userId ?? "";
+  const revisedDocument = getAccessibleDocument(params.data.id, userId);
+  const baseDocument = getAccessibleDocument(body.data.against, userId);
   if (!revisedDocument || !baseDocument) {
     res.status(404).json({ error: "Version not found" });
     return;
@@ -580,7 +617,7 @@ router.post("/documents/:id", (req, res): void => {
     return;
   }
 
-  const document = documents.get(params.data.id);
+  const document = getAccessibleDocument(params.data.id, req.session?.userId ?? "");
   if (!document) {
     res.status(404).json({ error: "Document not found" });
     return;

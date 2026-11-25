@@ -193,6 +193,7 @@ test("uploading a real document and asking a grounded question returns a grounde
     const documentText = "1. Termination. Client may terminate this Agreement for convenience upon thirty (30) days' written notice.";
     form.append("file", asBlob(makePdf(documentText)), "termination.pdf");
     const uploadResponse = await fetch(`${baseUrl}/api/documents/upload`, { method: "POST", body: form });
+    const rawCookie = uploadResponse.headers.get("set-cookie") ?? "";
     const uploadBody = (await uploadResponse.json()) as { id: string; clauses: Array<{ id: string; text: string }> };
 
     assert.equal(uploadResponse.status, 201);
@@ -200,7 +201,7 @@ test("uploading a real document and asking a grounded question returns a grounde
 
     const askResponse = await fetch(`${baseUrl}/api/documents/${uploadBody.id}/ask`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: rawCookie },
       body: JSON.stringify({ question: "What happens if I terminate early?", perspective: "party_a" }),
     });
     const askBody = (await askResponse.json()) as { answer: string; citations: Array<{ clauseId: string }>; groundingRatio: number };

@@ -41,16 +41,12 @@ app.use(securityHeaders);
  * `https://clause-compass.vercel.app,https://clause-compass-abc.vercel.app`
  * Do NOT include a trailing slash.
  */
-const DEFAULT_ALLOWED_ORIGINS = [
-  "http://localhost:5173",
-  "http://localhost:4173",
-  "https://clause-compass-g2fs2nu4d-4rivxs-projects.vercel.app",
-];
+const DEFAULT_ALLOWED_ORIGINS: string[] = [];
 
 // Vercel preview deployments get a unique URL per deployment
 // (e.g. https://clause-compass-abc123-4rivxs-projects.vercel.app).
 // Allow any Clause-Compass Vercel deployment so previews keep working.
-const VERCEL_PREVIEW_ORIGIN = /^https:\/\/clause-compass.*\.vercel\.app$/;
+const VERCEL_PREVIEW_ORIGIN = /^https:\/\/clause-compass-[a-z0-9]+-4rivxs-projects\.vercel\.app$/;
 
 const envOrigins = (process.env.CORS_ORIGIN ?? "")
   .split(",")

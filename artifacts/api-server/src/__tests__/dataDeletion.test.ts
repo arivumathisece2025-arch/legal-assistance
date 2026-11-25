@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { parseSession, SESSION_COOKIE } from "../middlewares/session";
 import { resetAuditChain, verifyAuditChain } from "../lib/auditLog";
 import { resetRateLimits } from "../middlewares/rateLimit";
-import { purgeAllDocuments } from "../routes/documents";
+import { purgeDocumentsFor } from "../routes/documents";
 
 process.env.APP_ENCRYPTION_KEY = "data-deletion-test-key";
 delete process.env.DATABASE_URL;
@@ -59,13 +59,30 @@ test("the deletion route refuses to act without a CSRF token", async () => {
   });
 });
 
-test("an authenticated deletion really removes the in-memory documents", async () => {
+test("an authenticated deletion really removes only the caller's documents", async () => {
   await withServer(async (baseUrl) => {
     const { cookie, csrfToken } = await authenticated(baseUrl);
 
-    const before = await fetch(`${baseUrl}/api/documents`);
+    const before = await fetch(`${baseUrl}/api/documents`, { headers: { cookie } });
     const beforeBody = (await before.json()) as unknown[];
     assert.ok(beforeBody.length > 0, "expected seeded documents to exist first");
+
+    // Upload a private document owned by this session.
+    const form = new FormData();
+    form.append("file", new Blob([`1. Test clause. This is private.`], { type: "text/plain" }), "private.txt");
+    const uploadResponse = await fetch(`${baseUrl}/api/documents/upload`, {
+      method: "POST",
+      headers: { cookie },
+      body: form,
+    });
+    assert.equal(uploadResponse.status, 201);
+    const uploadBody = (await uploadResponse.json()) as { id: string };
+    const myDocId = uploadBody.id;
+
+    // After upload, the caller should see public docs + their own.
+    const afterUpload = await fetch(`${baseUrl}/api/documents`, { headers: { cookie } });
+    const afterUploadBody = (await afterUpload.json()) as unknown[];
+    assert.ok(afterUploadBody.length >= beforeBody.length, "uploaded doc should appear in list");
 
     const response = await fetch(`${baseUrl}/api/data/delete`, {
       method: "POST",
@@ -74,11 +91,14 @@ test("an authenticated deletion really removes the in-memory documents", async (
     const body = (await response.json()) as DeleteResponse;
 
     assert.equal(response.status, 200);
-    assert.equal(body.documentsPurged, beforeBody.length);
+    assert.ok(body.documentsPurged >= 1, "caller's uploaded doc should be purged");
 
-    const after = await fetch(`${baseUrl}/api/documents`);
+    // Public documents remain; only the caller's private docs are gone.
+    const after = await fetch(`${baseUrl}/api/documents`, { headers: { cookie } });
     const afterBody = (await after.json()) as unknown[];
-    assert.equal(afterBody.length, 0, "documents must actually be gone");
+    const stillHasMyDoc = afterBody.some((doc: { id: string }) => doc.id === myDocId);
+    assert.equal(stillHasMyDoc, false, "caller's document must be gone");
+    assert.ok(afterBody.length > 0, "public documents should remain");
   });
 });
 
@@ -107,7 +127,7 @@ test("a deletion request is written to the audit chain", async () => {
     });
 
     const response = await fetch(`${baseUrl}/api/audit`);
-    const body = (await response.json()) as { entries: Array<{ action: string }> };
+    const body = (await response.json()) as { entries: Array<{ action: string; userId: string }> };
 
     assert.ok(body.entries.some((entry) => entry.action === "DATA_DELETION_REQUEST"));
     assert.equal(verifyAuditChain().valid, true);
@@ -124,7 +144,7 @@ test("the audit chain verifies over HTTP", async () => {
   });
 });
 
-test("purgeAllDocuments is idempotent", () => {
-  assert.deepEqual(purgeAllDocuments(), []);
-  assert.deepEqual(purgeAllDocuments(), []);
+test("purgeDocumentsFor only removes the caller's documents", () => {
+  assert.deepEqual(purgeDocumentsFor("user-a"), []);
+  assert.deepEqual(purgeDocumentsFor("user-a"), []);
 });

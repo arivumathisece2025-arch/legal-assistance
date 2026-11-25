@@ -21,7 +21,7 @@ router.post("/questions", async (req, res): Promise<void> => {
   }
 
   try {
-    const result = await answerDocumentQuestion(parsed.data.documentId, parsed.data.question, parsed.data.perspective, "en");
+    const result = await answerDocumentQuestion(parsed.data.documentId, req.session?.userId ?? "", parsed.data.question, parsed.data.perspective, "en");
 
     if (wantsSse) {
       res.write(`event: answer\ndata: ${JSON.stringify(result)}\n\n`);
@@ -33,12 +33,17 @@ router.post("/questions", async (req, res): Promise<void> => {
     res.json(result);
   } catch (error) {
     if (wantsSse) {
-      res.write(`event: error\ndata: ${JSON.stringify({ message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+      res.write(`event: error\ndata: ${JSON.stringify({ message: "Answer could not be generated." })}\n\n`);
       res.end();
       return;
     }
 
-    res.status(404).json({ error: "Document not found" });
+    if (error instanceof Error && error.message === "Document not found") {
+      res.status(404).json({ error: "Document not found" });
+      return;
+    }
+
+    res.status(500).json({ code: "QUESTION_FAILED", message: "Answer could not be generated." });
   }
 });
 

@@ -2,6 +2,7 @@ import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const storedDocuments = pgTable("stored_documents", {
 	id: text("id").primaryKey(),
+	ownerId: text("owner_id").notNull(),
 	name: text("name").notNull(),
 	fileType: text("file_type").notNull(),
 	encryptedBlob: text("encrypted_blob").notNull(),

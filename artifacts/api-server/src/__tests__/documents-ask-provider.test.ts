@@ -35,19 +35,23 @@ type AskResponse = {
  * name/fileType/sizeBytes, not text), so the upload route is used here to get a
  * document that actually has segmented clauses to retrieve.
  */
-async function createDocument(baseUrl: string, name: string, text: string): Promise<string> {
+async function createDocument(baseUrl: string, name: string, text: string, cookie?: string): Promise<string> {
   const form = new FormData();
   form.append("file", new Blob([text], { type: "text/plain" }), `${name}.txt`);
 
-  const created = await fetch(`${baseUrl}/api/documents/upload`, { method: "POST", body: form });
+  const created = await fetch(`${baseUrl}/api/documents/upload`, {
+    method: "POST",
+    headers: cookie ? { cookie } : {},
+    body: form,
+  });
   assert.equal(created.status, 201);
   return ((await created.json()) as { id: string }).id;
 }
 
-async function askDocument(baseUrl: string, id: string, question: string) {
+async function askDocument(baseUrl: string, id: string, question: string, cookie?: string) {
   return fetch(`${baseUrl}/api/documents/${id}/ask`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
     body: JSON.stringify({ question, perspective: "party_a" }),
   });
 }
@@ -81,13 +85,17 @@ test("the ask route calls a real provider instead of the inline quote stub", asy
 
   try {
     await withServer(async (baseUrl) => {
+      const uploadResponse = await fetch(`${baseUrl}/api/healthz`);
+      const rawCookie = uploadResponse.headers.get("set-cookie") ?? "";
+
       const id = await createDocument(
         baseUrl,
         "provider-routing",
         "1. Termination. Client may terminate this Agreement for convenience upon thirty (30) days written notice.",
+        rawCookie,
       );
 
-      const ask = await askDocument(baseUrl, id, "How do I terminate early?");
+      const ask = await askDocument(baseUrl, id, "How do I terminate early?", rawCookie);
       const body = (await ask.json()) as AskResponse;
 
       assert.equal(ask.status, 200);
@@ -118,17 +126,22 @@ test("a provider failure surfaces as 500, not a misleading 404", async () => {
 
   try {
     await withServer(async (baseUrl) => {
+      const uploadResponse = await fetch(`${baseUrl}/api/healthz`);
+      const rawCookie = uploadResponse.headers.get("set-cookie") ?? "";
+
       const id = await createDocument(
         baseUrl,
         "failure-surfacing",
         "1. Termination. Either party may terminate on 30 days notice.",
+        rawCookie,
       );
 
-      const ask = await askDocument(baseUrl, id, "Term?");
+      const ask = await askDocument(baseUrl, id, "Term?", rawCookie);
       const body = (await ask.json()) as { error?: string };
 
       assert.equal(ask.status, 500, "an upstream failure is not a missing document");
-      assert.match(body.error ?? "", /GROQ_API_KEY is not configured/);
+      assert.equal((body as { code?: string; message?: string }).code, "ASK_FAILED");
+      assert.equal((body as { code?: string; message?: string }).message, "Answer could not be generated.");
     });
   } finally {
     GroqProvider.prototype.completeJson = originalCompleteJson;
