@@ -1,3 +1,4 @@
+// Generated sibling `app.mjs` is produced by `artifacts/api-server/build.mjs`.
 let appPromise;
 
 export default async function handler(req, res) {

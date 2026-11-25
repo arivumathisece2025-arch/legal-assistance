@@ -1,13 +1,16 @@
-.PHONY: typecheck test dev build
+.PHONY: lint typecheck test build dev
+
+lint:
+	pnpm run lint
 
 typecheck:
 	pnpm run typecheck
 
 test:
-	pnpm --filter @workspace/core test
-
-dev:
-	pnpm --filter @workspace/api-server run dev
+	pnpm test
 
 build:
 	pnpm run build
+
+dev:
+	pnpm --filter @workspace/api-server run dev

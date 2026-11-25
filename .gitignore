@@ -62,5 +62,6 @@ Thumbs.db
 .vercel
 
 # Vercel generated serverless bundle
+api/app.mjs
 api/*.mjs
 api/*.mjs.map
