@@ -58,7 +58,7 @@ export default function AccessibilityPage() {
         </ul>
         <h2>Tell us what got in the way</h2>
         <p>If a control, explanation, or document state was difficult to use, please share the detail with the person supporting your Clause Compass workspace. Specific page names and steps help us make a better fix.</p>
-        <Link href="/" className="cc-button cc-button-primary" style={{ marginTop: 9 }} data-testid="link-sidebar-accessibility">Back to inbox</Link>
+        <Link href="/" className="cc-button cc-button-primary cc-accessibility-return" data-testid="link-sidebar-accessibility">Back to inbox</Link>
       </div>
     </main>
   );

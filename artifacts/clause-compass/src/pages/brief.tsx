@@ -15,9 +15,9 @@ export default function LawyerPrepBriefPage() {
   if (isLoading)
     return (
       <main className="cc-content">
-        <div className="cc-skeleton" style={{ width: 120, height: 16, marginBottom: 20 }} />
-        <div className="cc-skeleton" style={{ width: "80%", height: 48, marginBottom: 12 }} />
-        <div className="cc-skeleton" style={{ width: "60%", height: 18 }} />
+        <div className="cc-skeleton cc-skeleton-brief-back" />
+        <div className="cc-skeleton cc-skeleton-brief-title" />
+        <div className="cc-skeleton cc-skeleton-brief-meta" />
       </main>
     );
   if (isError || !document)
@@ -58,7 +58,7 @@ export default function LawyerPrepBriefPage() {
       <Link href={`/documents/${id}`} className="cc-back" data-testid="link-back-document">
         <ArrowLeft size={14} /> Back to document
       </Link>
-      <section className="cc-panel cc-panel-pad" style={{ marginTop: 18 }}>
+      <section className="cc-panel cc-panel-pad cc-brief-panel">
         <div className="cc-panel-head">
           <div>
             <h1>Lawyer Prep Brief</h1>
@@ -66,7 +66,7 @@ export default function LawyerPrepBriefPage() {
           </div>
           <BookOpen size={18} color="hsl(var(--primary))" />
         </div>
-        <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", lineHeight: 1.7, margin: 0 }}>
+        <pre className="cc-brief-content">
           {brief}
         </pre>
       </section>

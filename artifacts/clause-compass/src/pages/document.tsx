@@ -88,7 +88,27 @@ export default function DocumentPage() {
     askQuestion.mutate({ data: { documentId: id, question: question.trim(), perspective, language } });
   };
 
-  if (isLoading) return <main className="cc-content"><div className="cc-skeleton" style={{ width: 88, height: 14, marginBottom: 24 }} /><div className="cc-skeleton" style={{ width: "60%", height: 52, marginBottom: 10 }} /><div className="cc-skeleton" style={{ width: "35%", height: 17, marginBottom: 35 }} /><div className="cc-analysis-grid"><div className="cc-panel cc-panel-pad"><div className="cc-skeleton" style={{ width: "35%", height: 20, marginBottom: 22 }} />{[1, 2, 3].map((item) => <div key={item} style={{ padding: "25px 0", borderTop: "1px solid hsl(var(--border))" }}><div className="cc-skeleton" style={{ width: "55%", height: 18, marginBottom: 12 }} /><div className="cc-skeleton" style={{ width: "90%", height: 42 }} /></div>)}</div><div className="cc-panel" style={{ height: 260 }} /></div></main>;
+  if (isLoading) {
+    return (
+      <main className="cc-content">
+        <div className="cc-skeleton cc-skeleton-doc-back" />
+        <div className="cc-skeleton cc-skeleton-doc-title" />
+        <div className="cc-skeleton cc-skeleton-doc-meta" />
+        <div className="cc-analysis-grid">
+          <div className="cc-panel cc-panel-pad">
+            <div className="cc-skeleton cc-skeleton-section-title" />
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="cc-skeleton-clause-row">
+                <div className="cc-skeleton cc-skeleton-clause-title" />
+                <div className="cc-skeleton cc-skeleton-clause-text" />
+              </div>
+            ))}
+          </div>
+          <div className="cc-panel cc-skeleton-side-panel" />
+        </div>
+      </main>
+    );
+  }
   if (isError || !document) return <main className="cc-content"><div className="cc-alert cc-alert-error" role="alert" data-testid="status-document-error"><AlertCircle size={16} /> This workspace is unavailable. <button type="button" className="cc-button cc-button-quiet" onClick={() => refetch()} data-testid="button-retry-document"><RotateCcw size={14} /> Try again</button></div></main>;
 
   const score = Math.max(0, Math.min(100, document.riskScore || 0));
@@ -110,8 +130,8 @@ export default function DocumentPage() {
         </div>
       </header>
 
-      {analyzeDocument.isError && <div className="cc-alert cc-alert-error" role="alert" style={{ marginBottom: 18 }} data-testid="status-analysis-error"><AlertCircle size={16} /> Analysis could not start. Please try again.</div>}
-      {document.status === "analyzing" && <div className="cc-alert" style={{ marginBottom: 18, color: "hsl(26 50% 29%)", background: "hsl(31 75% 61% / .12)", borderColor: "hsl(31 75% 61% / .35)" }} data-testid="status-analysis-progress"><ScanText size={16} /> We are reading the structure of this document. You can leave this page and come back.</div>}
+      {analyzeDocument.isError && <div className="cc-alert cc-alert-error cc-analysis-error" role="alert" data-testid="status-analysis-error"><AlertCircle size={16} /> Analysis could not start. Please try again.</div>}
+      {document.status === "analyzing" && <div className="cc-alert cc-analysis-progress" data-testid="status-analysis-progress"><ScanText size={16} /> We are reading the structure of this document. You can leave this page and come back.</div>}
 
       <div className="cc-analysis-grid">
         <section className="cc-panel cc-panel-pad" aria-labelledby="clauses-heading">
@@ -119,8 +139,8 @@ export default function DocumentPage() {
           {document.clauses?.length ? <div className="cc-clause-list">{document.clauses.map((clause) => <article className="cc-clause" key={clause.id} data-testid={`clause-${clause.id}`}>
             <div className="cc-clause-top"><div><span className="cc-clause-id">{clause.ordinal}</span><h3>{clause.heading}</h3></div><SeverityBadge severity={clause.severity as Severity} /></div>
             <p className="cc-clause-summary">{clause.summary}</p>
-            <details style={{ marginTop: 11 }}><summary style={{ color: "hsl(var(--primary))", fontSize: 11, cursor: "pointer" }} data-testid={`button-expand-clause-${clause.id}`}>Show document language</summary><blockquote className="cc-clause-text">{clause.text}</blockquote></details>
-          </article>)}</div> : <div className="cc-empty" style={{ marginTop: 20 }} data-testid="status-clauses-empty"><ScanText size={24} className="cc-empty-icon" /><h3>Analysis will appear here.</h3><p>Start a document analysis to organize its clauses and surface places worth asking about.</p><button type="button" className="cc-button cc-button-primary" onClick={handleAnalyze} disabled={analyzeDocument.isPending} data-testid="button-analyze-empty">Analyze now</button></div>}
+            <details className="cc-clause-details"><summary className="cc-clause-summary-toggle" data-testid={`button-expand-clause-${clause.id}`}>Show document language</summary><blockquote className="cc-clause-text">{clause.text}</blockquote></details>
+          </article>)}</div> : <div className="cc-empty cc-empty-clauses" data-testid="status-clauses-empty"><ScanText size={24} className="cc-empty-icon" /><h3>Analysis will appear here.</h3><p>Start a document analysis to organize its clauses and surface places worth asking about.</p><button type="button" className="cc-button cc-button-primary" onClick={handleAnalyze} disabled={analyzeDocument.isPending} data-testid="button-analyze-empty">Analyze now</button></div>}
         </section>
 
         <aside className="cc-side-stack">
@@ -148,11 +168,11 @@ export default function DocumentPage() {
 
       <section className="cc-panel cc-question-panel" aria-labelledby="question-heading">
         <div className="cc-panel-pad">
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}><MessageCircleQuestion size={22} color="hsl(var(--primary))" /><div><h2 className="cc-question-title" id="question-heading">Ask from your side of the table</h2><p className="cc-question-note">Answers stay anchored to this document. Ask what a phrase means, where a responsibility sits, or what to bring to your lawyer.</p></div></div>
-          <form onSubmit={submitQuestion} style={{ marginTop: 16 }}>
+          <div className="cc-question-heading"><MessageCircleQuestion size={22} color="hsl(var(--primary))" /><div><h2 className="cc-question-title" id="question-heading">Ask from your side of the table</h2><p className="cc-question-note">Answers stay anchored to this document. Ask what a phrase means, where a responsibility sits, or what to bring to your lawyer.</p></div></div>
+          <form onSubmit={submitQuestion} className="cc-question-form">
             <label className="cc-field-label" htmlFor="question">{texts.questionLabel}</label>
             <textarea id="question" className="cc-textarea" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="For example: What happens if I need to end this agreement early?" disabled={askQuestion.isPending} data-testid="input-question" />
-            <div className="cc-form-row" style={{ marginTop: 10 }}>
+            <div className="cc-form-row cc-question-options">
               <div>
                 <label className="cc-field-label" htmlFor="language">{texts.languageLabel}</label>
                 <select id="language" className="cc-select" value={language} onChange={(event) => setLanguage(event.target.value as UiLanguage)} data-testid="select-language">
@@ -164,7 +184,7 @@ export default function DocumentPage() {
               <button className="cc-button cc-button-primary" type="submit" disabled={!question.trim() || askQuestion.isPending} data-testid="button-ask-question">{askQuestion.isPending ? "Thinking…" : "Ask question"} <ChevronRight size={15} /></button>
             </div>
           </form>
-          {askQuestion.isError && <div className="cc-alert cc-alert-error" role="alert" style={{ marginTop: 15 }} data-testid="status-question-error"><AlertCircle size={15} /> We could not answer from this document. Try rephrasing your question.</div>}
+          {askQuestion.isError && <div className="cc-alert cc-alert-error cc-question-error" role="alert" data-testid="status-question-error"><AlertCircle size={15} /> We could not answer from this document. Try rephrasing your question.</div>}
           {askQuestion.data && <div className="cc-answer" data-testid="answer-response"><div className="cc-answer-head"><span className="cc-answer-label">{askQuestion.data.queued ? "Answer queued" : texts.answerLabel}</span><span className="cc-grounding">{Math.round(askQuestion.data.groundingRatio * 100)}% grounded</span></div><p>{askQuestion.data.answer}</p><button className="cc-button cc-button-soft" type="button" onClick={() => readAnswerAloud(askQuestion.data.answer)}>{texts.readAloud}</button><div className="cc-citations">{askQuestion.data.citations.map((citation) => <span className="cc-citation" key={`${citation.clauseId}-${citation.label}`}>{citation.label}</span>)}</div></div>}
           <div className="cc-disclaimer"><ShieldCheck size={14} /> Clause Compass can explain the document’s words, but it cannot determine what is legally right for you. Treat every answer as preparation for a conversation with a qualified lawyer.</div>
         </div>

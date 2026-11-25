@@ -322,3 +322,39 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
 }
+
+.cc-sidebar-security-row { display:flex; align-items:center; gap:7px; margin-bottom:7px; }
+.cc-sidebar-security-title { color:hsl(42 33% 94%); font-size:11px; }
+.cc-sidebar-limitations-link { margin-top:12px; }
+.cc-upload-error { margin-bottom:20px; }
+.cc-skeleton-card-name { height:42px; }
+.cc-skeleton-card-line { height:30px; }
+.cc-home-disclaimer { display:flex; align-items:flex-start; gap:10px; margin-top:42px; padding-top:21px; border-top:1px solid hsl(var(--border)); }
+.cc-home-disclaimer-copy { max-width:650px; margin:0; color:hsl(var(--muted-foreground)); font-size:11px; line-height:1.55; }
+.cc-accessibility-return { margin-top:9px; }
+.cc-skeleton-brief-back { width:120px; height:16px; margin-bottom:20px; }
+.cc-skeleton-brief-title { width:80%; height:48px; margin-bottom:12px; }
+.cc-skeleton-brief-meta { width:60%; height:18px; }
+.cc-brief-panel { margin-top:18px; }
+.cc-brief-content { white-space:pre-wrap; font-family:inherit; line-height:1.7; margin:0; }
+.cc-skeleton-compare-back { width:140px; height:16px; margin-bottom:20px; }
+.cc-skeleton-compare-title { width:70%; height:44px; margin-bottom:12px; }
+.cc-skeleton-compare-meta { width:50%; height:18px; }
+.cc-compare-state { margin-bottom:18px; }
+.cc-skeleton-doc-back { width:88px; height:14px; margin-bottom:24px; }
+.cc-skeleton-doc-title { width:60%; height:52px; margin-bottom:10px; }
+.cc-skeleton-doc-meta { width:35%; height:17px; margin-bottom:35px; }
+.cc-skeleton-section-title { width:35%; height:20px; margin-bottom:22px; }
+.cc-skeleton-clause-row { padding:25px 0; border-top:1px solid hsl(var(--border)); }
+.cc-skeleton-clause-title { width:55%; height:18px; margin-bottom:12px; }
+.cc-skeleton-clause-text { width:90%; height:42px; }
+.cc-skeleton-side-panel { height:260px; }
+.cc-analysis-error { margin-bottom:18px; }
+.cc-analysis-progress { margin-bottom:18px; color:hsl(26 50% 29%); background:hsl(31 75% 61% / .12); border-color:hsl(31 75% 61% / .35); }
+.cc-clause-details { margin-top:11px; }
+.cc-clause-summary-toggle { color:hsl(var(--primary)); font-size:11px; cursor:pointer; }
+.cc-empty-clauses { margin-top:20px; }
+.cc-question-heading { display:flex; align-items:flex-start; gap:12px; }
+.cc-question-form { margin-top:16px; }
+.cc-question-options { margin-top:10px; }
+.cc-question-error { margin-top:15px; }

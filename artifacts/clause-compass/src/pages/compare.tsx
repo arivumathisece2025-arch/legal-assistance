@@ -172,7 +172,7 @@ export default function CompareVersionsPage() {
     window.requestAnimationFrame(() => { scrollLock.current = false; });
   };
 
-  if (isLoading || documentsLoading) return <main className="cc-content"><div className="cc-skeleton" style={{ width: 140, height: 16, marginBottom: 20 }} /><div className="cc-skeleton" style={{ width: "70%", height: 44, marginBottom: 12 }} /><div className="cc-skeleton" style={{ width: "50%", height: 18 }} /></main>;
+  if (isLoading || documentsLoading) return <main className="cc-content"><div className="cc-skeleton cc-skeleton-compare-back" /><div className="cc-skeleton cc-skeleton-compare-title" /><div className="cc-skeleton cc-skeleton-compare-meta" /></main>;
   if (isError || !revisedDocument) return <main className="cc-content"><div className="cc-alert cc-alert-error" role="alert" data-testid="status-compare-unavailable"><AlertCircle size={16} /> This comparison is unavailable.</div></main>;
 
   const comparison = compare.data;
@@ -213,9 +213,9 @@ export default function CompareVersionsPage() {
         </div>
       </section>
 
-      {candidateVersions.length === 0 && <div className="cc-alert" style={{ marginBottom: 18 }} role="status" data-testid="status-needs-second-version"><ScanText size={16} /> Add a revised version to the inbox and this page will align it clause by clause.</div>}
-      {compare.isPending && <div className="cc-alert" style={{ marginBottom: 18 }} role="status" data-testid="status-compare-pending"><ScanText size={16} /> Aligning clauses and diffing risk findings…</div>}
-      {compare.isError && <div className="cc-alert cc-alert-error" role="alert" style={{ marginBottom: 18 }} data-testid="status-compare-error"><AlertCircle size={16} /> The comparison could not be built. <button type="button" className="cc-button cc-button-quiet" onClick={() => compare.mutate({ id, data: { against: baseId, perspective } })}>Try again</button></div>}
+      {candidateVersions.length === 0 && <div className="cc-alert cc-compare-state" role="status" data-testid="status-needs-second-version"><ScanText size={16} /> Add a revised version to the inbox and this page will align it clause by clause.</div>}
+      {compare.isPending && <div className="cc-alert cc-compare-state" role="status" data-testid="status-compare-pending"><ScanText size={16} /> Aligning clauses and diffing risk findings…</div>}
+      {compare.isError && <div className="cc-alert cc-alert-error cc-compare-state" role="alert" data-testid="status-compare-error"><AlertCircle size={16} /> The comparison could not be built. <button type="button" className="cc-button cc-button-quiet" onClick={() => compare.mutate({ id, data: { against: baseId, perspective } })}>Try again</button></div>}
       {comparison && <ComparisonView comparison={comparison} visibleRows={visibleRows} totalRows={rows.length} changesOnly={changesOnly} leftPaneRef={leftPaneRef} rightPaneRef={rightPaneRef} onScroll={handleScroll} favourLabel={favourLabel} />}
     </main>
   );

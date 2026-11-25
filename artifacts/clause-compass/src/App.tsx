@@ -43,12 +43,12 @@ function Shell({ children }: { children: ReactNode }) {
             </Link>
           </nav>
           <div className="cc-sidebar-footer">
-            <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 7 }}>
+            <div className="cc-sidebar-security-row">
               <LockKeyhole size={13} />
-              <strong style={{ color: 'hsl(42 33% 94%)', fontSize: 11 }}>Private by design</strong>
+              <strong className="cc-sidebar-security-title">Private by design</strong>
             </div>
             Documents are processed to explain what is on the page, not to make decisions for you.
-            <div style={{ marginTop: 12 }}><Link href="/accessibility" data-testid="link-sidebar-accessibility">Read our limitations →</Link></div>
+            <div className="cc-sidebar-limitations-link"><Link href="/accessibility" data-testid="link-sidebar-accessibility">Read our limitations →</Link></div>
           </div>
         </aside>
         <div className="cc-main" id="main-content" tabIndex={-1}>
@@ -145,14 +145,14 @@ function HomePage() {
         </button>
       </section>
 
-      {uploadError && <div className="cc-alert cc-alert-error" role="alert" style={{ marginBottom: 20 }} data-testid="status-upload-error"><AlertCircle size={16} /> {uploadError}</div>}
+      {uploadError && <div className="cc-alert cc-alert-error cc-upload-error" role="alert" data-testid="status-upload-error"><AlertCircle size={16} /> {uploadError}</div>}
 
       <section aria-labelledby="documents-heading">
         <div className="cc-section-head">
           <h2 className="cc-section-title" id="documents-heading">Your documents</h2>
           <span className="cc-section-meta">{documents?.length ?? 0} {documents?.length === 1 ? 'workspace' : 'workspaces'}</span>
         </div>
-        {isLoading && <div className="cc-document-list" aria-label="Loading documents" data-testid="status-documents-loading">{[1, 2, 3].map((item) => <div className="cc-document-card" key={item}><div className="cc-skeleton" style={{ height: 42 }} /><div className="cc-skeleton" style={{ height: 30 }} /><div className="cc-skeleton" style={{ height: 30 }} /><div className="cc-skeleton" style={{ height: 30 }} /></div>)}</div>}
+        {isLoading && <div className="cc-document-list" aria-label="Loading documents" data-testid="status-documents-loading">{[1, 2, 3].map((item) => <div className="cc-document-card" key={item}><div className="cc-skeleton cc-skeleton-card-name" /><div className="cc-skeleton cc-skeleton-card-line" /><div className="cc-skeleton cc-skeleton-card-line" /><div className="cc-skeleton cc-skeleton-card-line" /></div>)}</div>}
         {isError && <div className="cc-alert cc-alert-error" role="alert" data-testid="status-documents-error"><AlertCircle size={16} /> We could not load your documents. <button type="button" className="cc-button cc-button-quiet" onClick={() => refetch()} data-testid="button-retry-documents"><RotateCcw size={14} /> Try again</button></div>}
         {!isLoading && !isError && documents?.length === 0 && <div className="cc-empty" data-testid="status-documents-empty"><FileText size={27} className="cc-empty-icon" /><h3>Your reading desk is clear.</h3><p>Add a contract to see its clauses, risk signals, and a place to ask grounded questions.</p><button type="button" className="cc-button cc-button-soft" onClick={() => fileRef.current?.click()} data-testid="button-upload-empty"><Upload size={15} /> Add your first document</button></div>}
         {!isLoading && !isError && !!documents?.length && <div className="cc-document-list" data-testid="list-documents">
@@ -167,9 +167,9 @@ function HomePage() {
         </div>}
       </section>
 
-      <section style={{ marginTop: 42, paddingTop: 21, borderTop: '1px solid hsl(var(--border))', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <section className="cc-home-disclaimer">
         <ShieldCheck size={17} color="hsl(var(--primary))" />
-        <p style={{ margin: 0, color: 'hsl(var(--muted-foreground))', fontSize: 11, lineHeight: 1.55, maxWidth: 650 }}>Clause Compass explains language that appears in your document. It does not provide legal advice, predict an outcome, or replace a lawyer’s judgment.</p>
+        <p className="cc-home-disclaimer-copy">Clause Compass explains language that appears in your document. It does not provide legal advice, predict an outcome, or replace a lawyer’s judgment.</p>
       </section>
     </main>
   );
