@@ -19,6 +19,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
       - run: pnpm run typecheck
       - run: pnpm test
       - run: pnpm --filter @workspace/clause-compass run build

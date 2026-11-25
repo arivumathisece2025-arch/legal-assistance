@@ -70,7 +70,7 @@ router.post("/documents/:id/compare", async (req, res): Promise<void> => {
       revisedDocumentIdHash: hashAuditIdentifier(revisedDocument.id),
     });
     res.json(CompareDocumentVersionsResponse.parse(comparison));
-  } catch (error) {
+  } catch {
     res.status(500).json({
       code: "COMPARE_FAILED",
       message: "Comparison failed.",

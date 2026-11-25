@@ -150,6 +150,7 @@ export default function CompareVersionsPage() {
   const rightPaneRef = useRef<HTMLDivElement>(null);
   const scrollLock = useRef(false);
   const compare = useCompareDocumentVersions();
+  const { mutate: compareVersions } = compare;
 
   const candidateVersions = (documents ?? []).filter((document) => document.id !== id);
 
@@ -159,8 +160,8 @@ export default function CompareVersionsPage() {
 
   useEffect(() => {
     if (!id || !baseId || baseId === id) return;
-    compare.mutate({ id, data: { against: baseId, perspective } });
-  }, [id, baseId, perspective]);
+    compareVersions({ id, data: { against: baseId, perspective } });
+  }, [id, baseId, perspective, compareVersions]);
 
   const handleScroll = (source: "left" | "right") => {
     const from = source === "left" ? leftPaneRef.current : rightPaneRef.current;

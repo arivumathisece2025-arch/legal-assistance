@@ -114,7 +114,7 @@ export function packV1Rules(): RiskRule[] {
       title: "Auto-renewal with short notice",
       severity: "medium",
       appliesTo: ["auto_renewal"],
-      predicate: (clause) => /auto(?:matic)?[- ]?renew|renew(?:al)?/i.test(textOf(clause)) && /(?:less than|under|within)\s*(?:30|21|14|10|7|5)\s*days|\b(?:15|10|7|5)\s*days?\b/i.test(textOf(clause)),
+      predicate: (clause) => /auto(?:matic)?[- ]?renew|renew(?:al)?\b/i.test(textOf(clause)) && /(?:less than|under|within)\s*(?:30|21|14|10|7|5)\s*days|\b(?:15|10|7|5)\s*days?\b/i.test(textOf(clause)),
       explanationTemplate: "The auto-renewal clause in {clauseHeading} can lock the relationship in after a very short notice window.",
       askYourLawyer: "What notice period would be reasonable to stop or renegotiate renewal before the term extends automatically?",
       perspective: "partyB",

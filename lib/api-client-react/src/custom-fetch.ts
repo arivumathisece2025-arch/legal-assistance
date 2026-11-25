@@ -316,7 +316,7 @@ function inferResponseType(response: Response): "json" | "text" | "blob" {
   const mediaType = getMediaType(response.headers);
 
   if (isJsonMediaType(mediaType)) return "json";
-  if (isTextMediaType(mediaType) || mediaType == null) return "text";
+  if (isTextMediaType(mediaType) || mediaType === null || mediaType === undefined) return "text";
   return "blob";
 }
 
@@ -361,7 +361,7 @@ export async function customFetch<T = unknown>(
 
   const method = resolveMethod(input, init.method);
 
-  if (init.body != null && (method === "GET" || method === "HEAD")) {
+  if (init.body !== null && init.body !== undefined && (method === "GET" || method === "HEAD")) {
     throw new TypeError(`customFetch: ${method} requests cannot have a body.`);
   }
 

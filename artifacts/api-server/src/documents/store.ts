@@ -62,7 +62,10 @@ function withRetrievalIndex(document: DocumentRecord): DocumentRecord {
 }
 
 export function toPublicDocument(document: DocumentRecord): Omit<DocumentRecord, "encryptedBlob" | "retrievalIndex" | "sourcePages"> {
-  const { encryptedBlob: _encryptedBlob, retrievalIndex: _retrievalIndex, sourcePages: _sourcePages, ...publicDocument } = document;
+  const publicDocument = { ...document };
+  delete publicDocument.encryptedBlob;
+  delete publicDocument.retrievalIndex;
+  delete publicDocument.sourcePages;
   return publicDocument;
 }
 

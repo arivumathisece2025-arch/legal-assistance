@@ -111,7 +111,6 @@ async function runPerf() {
   const rules = stats(ruleTimes);
   const indexBuild = stats(indexBuildTimes);
   const retrieval = stats(retrievalTimes);
-  const classificationCallCount = Math.ceil(clauses.length / 25);
   const cpu = os.cpus()[0]?.model ?? "unknown CPU";
   const machine = `${os.platform()} ${os.release()} (${os.arch()}); ${cpu}`;
 

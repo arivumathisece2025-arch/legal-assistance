@@ -172,7 +172,7 @@ export class GroqProvider implements LLMProvider {
           body: JSON.stringify(body),
           signal,
         });
-      } catch (error) {
+      } catch {
         if (externalSignal?.aborted) throw new GroqRequestError();
         if (attempt + 1 >= MAX_ATTEMPTS) throw new GroqRequestError();
         await this.sleep(backoffDelay(attempt));

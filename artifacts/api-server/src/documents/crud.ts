@@ -18,7 +18,8 @@ router.get("/documents", (req, res) => {
   const response = Array.from(documents.values())
     .filter((document) => document.ownerId === "public" || document.ownerId === userId)
     .map((document) => {
-      const { clauses: _clauses, ...summary } = toPublicDocument(document);
+      const { clauses, ...summary } = toPublicDocument(document);
+      void clauses;
       return summary;
     });
   res.json(ListDocumentsResponse.parse(response));

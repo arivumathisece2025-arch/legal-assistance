@@ -101,7 +101,7 @@ function readCookie(header: string | undefined, name: string): string | undefine
  * than trusted.
  */
 export const sessionMiddleware: RequestHandler = (req, res, next) => {
-  let session: SessionData | null = null;
+  let session: SessionData | null;
 
   try {
     session = parseSession(readCookie(req.headers.cookie, SESSION_COOKIE));

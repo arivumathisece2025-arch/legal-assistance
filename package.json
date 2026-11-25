@@ -6,6 +6,8 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "lint": "eslint .",
+    "format:check": "prettier --check eslint.config.js .prettierrc package.json artifacts/clause-compass/src/pages/brief.tsx",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "test": "pnpm --filter @workspace/core test && pnpm --filter @workspace/api-server test",
     "test:e2e": "playwright test",
@@ -20,9 +22,13 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.6.2",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.9.6",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.74.0"
   }
 }
