@@ -16,8 +16,6 @@ import {
 } from "../align";
 import { clearCache, getCacheValue } from "../cache";
 import {
-  analyzeMaterialChange,
-  buildComparisonRows,
   compareVersions,
   diffRiskFindings,
   materialChangeCacheKey,
@@ -25,7 +23,7 @@ import {
   type ChangeLabel,
   type VersionDocument,
 } from "../versionDiff";
-import { evaluateDocumentRisk, evaluateRiskRules, type RiskClause } from "../rules/packV1";
+import { evaluateRiskRules, type RiskClause } from "../rules/packV1";
 
 const fixtureDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 

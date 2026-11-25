@@ -74,7 +74,7 @@ function Shell({ children }: { children: ReactNode }) {
 }
 
 function HomePage() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const fileRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState('');

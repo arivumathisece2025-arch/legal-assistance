@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type CSSProperties } from "react";
 import { AlertCircle, ArrowLeft, ChevronRight, Fingerprint, MessageCircleQuestion, RotateCcw, ScanText, ShieldCheck, TriangleAlert, Check } from "lucide-react";
 import { Link, useLocation, useParams } from "wouter";
-import { getCsrfToken, useAnalyzeDocument, useAskQuestion, useGetDocument, useSimplifyDocument, getGetDocumentQueryKey, getListDocumentsQueryKey } from "@workspace/api-client-react";
+import { getCsrfToken, useAnalyzeDocument, useAskQuestion, useGetDocument, useSimplifyDocument, getGetDocumentQueryKey } from "@workspace/api-client-react";
 import { languageOptions, uiText, type UiLanguage } from "@/lib/i18n";
 import { formatDate, SeverityBadge, StatusPill, type Severity, type Status } from "./shared";
 
 export default function DocumentPage() {
   const { id = "" } = useParams<{ id: string }>();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const { data: document, isLoading, isError, refetch } = useGetDocument(id, { query: { queryKey: getGetDocumentQueryKey(id), enabled: Boolean(id) } });
   const analyzeDocument = useAnalyzeDocument();
   const simplifyDocument = useSimplifyDocument();

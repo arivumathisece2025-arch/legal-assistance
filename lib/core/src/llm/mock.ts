@@ -88,7 +88,7 @@ export class MockProvider implements LLMProvider {
     this.fixtureDir = fixtureDir ?? defaultFixtureDir();
   }
 
-  async completeJson<T>(system: string, user: string, schema: z.ZodType<T>): Promise<T> {
+  async completeJson<T>(_system: string, user: string, schema: z.ZodType<T>): Promise<T> {
     const fixtureName = `${(schema.description ?? "default").toLowerCase().replace(/\s+/g, "-")}.json`;
     const fixturePath = `${this.fixtureDir}/${fixtureName}`;
     const fixtureData = readFixtureFile(fixturePath);

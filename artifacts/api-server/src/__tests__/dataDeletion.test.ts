@@ -97,7 +97,9 @@ test("an authenticated deletion really removes only the caller's documents", asy
     // Public documents remain; only the caller's private docs are gone.
     const after = await fetch(`${baseUrl}/api/documents`, { headers: { cookie } });
     const afterBody = (await after.json()) as unknown[];
-    const stillHasMyDoc = afterBody.some((doc: { id: string }) => doc.id === myDocId);
+    const stillHasMyDoc = afterBody.some(
+      (doc) => typeof doc === "object" && doc !== null && "id" in doc && doc.id === myDocId,
+    );
     assert.equal(stillHasMyDoc, false, "caller's document must be gone");
     assert.ok(afterBody.length > 0, "public documents should remain");
   });

@@ -60,16 +60,6 @@ function normalize(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function clauseExistsInDoc(clause: RiskClause, clauses: RiskClause[], maybeIdLike: string): boolean {
-  const normalized = normalize(maybeIdLike);
-  return clauses.some((candidate) => {
-    const idMatch = normalize(candidate.id) === normalized;
-    const ordinalMatch = normalize(candidate.ordinal) === normalized;
-    const headingMatch = normalize(candidate.heading).includes(normalized) || normalized.includes(normalize(candidate.heading));
-    return idMatch || ordinalMatch || headingMatch;
-  }) || clause.heading.toLowerCase().includes(normalized) || clause.text.toLowerCase().includes(normalized);
-}
-
 function explain(rule: RiskRule, clause: RiskClause): string {
   return rule.explanationTemplate
     .replaceAll("{clauseHeading}", clause.heading)
