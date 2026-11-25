@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { rateLimit } from "./middlewares/rateLimit";
+import { csrfProtection } from "./middlewares/csrf";
 import { securityHeaders } from "./middlewares/securityHeaders";
 import { sessionMiddleware } from "./middlewares/session";
 
@@ -43,9 +44,8 @@ app.use(securityHeaders);
  */
 const DEFAULT_ALLOWED_ORIGINS: string[] = [];
 
-// Vercel preview deployments get a unique URL per deployment
-// (e.g. https://clause-compass-abc123-4rivxs-projects.vercel.app).
-// Allow any Clause-Compass Vercel deployment so previews keep working.
+// Vercel preview deployments use this pattern in non-production. Production
+// origins must be explicitly configured through CORS_ORIGIN.
 const VERCEL_PREVIEW_ORIGIN = /^https:\/\/clause-compass-[a-z0-9]+-4rivxs-projects\.vercel\.app$/;
 
 const envOrigins = (process.env.CORS_ORIGIN ?? "")
@@ -61,7 +61,7 @@ app.use(
       // Same-origin / curl / health checks / Render rewrites have no Origin.
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (VERCEL_PREVIEW_ORIGIN.test(origin)) return callback(null, true);
+      if (process.env.NODE_ENV !== "production" && VERCEL_PREVIEW_ORIGIN.test(origin)) return callback(null, true);
       // In local dev with no CORS_ORIGIN configured, reflect any localhost origin.
       if (process.env.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(origin)) {
         return callback(null, true);
@@ -75,6 +75,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(sessionMiddleware);
+app.use("/api", csrfProtection);
 app.use("/api", rateLimit({ limit: 300, intervalMs: 60_000 }), router);
 
 export default app;

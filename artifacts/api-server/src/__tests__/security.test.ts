@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createServer } from "node:http";
 import { parseSession, SESSION_COOKIE } from "../middlewares/session";
-import { rateLimit, resetRateLimits } from "../middlewares/rateLimit";
+import { evictRateLimitBuckets, rateLimit, rateLimitBucketCountForTest, resetRateLimits } from "../middlewares/rateLimit";
 
-process.env.APP_ENCRYPTION_KEY = "middleware-test-key";
+process.env.APP_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+delete process.env.CORS_ORIGIN;
 const { default: app } = await import("../app");
 
 async function withServer<T>(callback: (baseUrl: string) => Promise<T>): Promise<T> {
@@ -61,10 +62,15 @@ test("security headers are present on API responses", async () => {
     assert.equal(response.status, 200);
     const csp = response.headers.get("content-security-policy") ?? "";
     assert.match(csp, /default-src 'self'/);
+    assert.match(csp, /style-src 'self'/);
+    assert.doesNotMatch(csp, /style-src 'self' 'unsafe-inline'/);
+    assert.match(csp, /style-src-attr 'unsafe-inline'/);
     assert.match(csp, /frame-ancestors 'none'/);
     assert.match(csp, /object-src 'none'/);
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("cross-origin-opener-policy"), "same-origin");
+    assert.equal(response.headers.get("cross-origin-resource-policy"), "same-origin");
     assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
     assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
   });
@@ -75,6 +81,46 @@ test("HSTS is withheld over plain HTTP in development", async () => {
     const response = await fetch(`${baseUrl}/api/healthz`);
     assert.equal(response.headers.get("strict-transport-security"), null);
   });
+});
+
+test("CORS accepts the exact Clause Compass preview pattern", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  try {
+    await withServer(async (baseUrl) => {
+      const origin = "https://clause-compass-preview123-4rivxs-projects.vercel.app";
+      const response = await fetch(`${baseUrl}/api/healthz`, { headers: { origin } });
+
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("access-control-allow-origin"), origin);
+    });
+  } finally {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+  }
+});
+
+test("CORS rejects lookalike deployment origins", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/healthz`, {
+        headers: { origin: "https://clause-compass-evil.vercel.app" },
+      });
+
+      assert.equal(response.status, 500);
+      assert.equal(response.headers.get("access-control-allow-origin"), null);
+
+      const previewResponse = await fetch(`${baseUrl}/api/healthz`, {
+        headers: { origin: "https://clause-compass-preview123-4rivxs-projects.vercel.app" },
+      });
+      assert.equal(previewResponse.status, 500, "production preview origins must be explicitly allowed in CORS_ORIGIN");
+    });
+  } finally {
+    if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalNodeEnv;
+  }
 });
 
 test("the session cookie is httpOnly, SameSite=Strict and path-scoped", async () => {
@@ -174,4 +220,51 @@ test("rate limiting keys on client IP, not the destination host", async () => {
   assert.equal(await invoke("198.51.100.11"), 200);
   // The original client is now empty.
   assert.equal(await invoke("198.51.100.10"), 429);
+});
+
+test("fully refilled stale rate-limit buckets are evicted", async () => {
+  const originalNow = Date.now;
+  let now = 1_000;
+  Date.now = () => now;
+  try {
+    const limited = rateLimit({ limit: 1, intervalMs: 100 });
+    await new Promise<number>((resolve) => limited(
+      { ip: "203.0.113.20", method: "GET" } as never,
+      fakeResponse((status) => resolve(status)) as never,
+      () => resolve(200),
+    ));
+    assert.equal(rateLimitBucketCountForTest(), 1);
+
+    now = 1_301;
+    evictRateLimitBuckets(now);
+    assert.equal(rateLimitBucketCountForTest(), 0);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test("the rate-limit map evicts the oldest key when it exceeds 10,000 buckets", async () => {
+  resetRateLimits();
+  const originalNow = Date.now;
+  let now = 1_000;
+  Date.now = () => now++;
+  try {
+    const limited = rateLimit({ limit: 1, intervalMs: 60_000 });
+    const invoke = (ip: string) => new Promise<number>((resolve) => limited(
+      { ip, method: "GET" } as never,
+      fakeResponse((status) => resolve(status)) as never,
+      () => resolve(200),
+    ));
+
+    assert.equal(await invoke("198.51.100.1"), 200);
+    for (let index = 0; index < 10_000; index += 1) {
+      assert.equal(await invoke(`198.51.100.${index + 2}`), 200);
+    }
+    assert.equal(rateLimitBucketCountForTest(), 10_000);
+    assert.equal(await invoke("198.51.100.1"), 200, "the oldest bucket was evicted and starts fresh");
+    assert.equal(rateLimitBucketCountForTest(), 10_000);
+  } finally {
+    Date.now = originalNow;
+    resetRateLimits();
+  }
 });

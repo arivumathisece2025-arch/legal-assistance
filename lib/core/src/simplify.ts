@@ -23,7 +23,7 @@ const simplificationSchema = z.object({
       text: z.string(),
     }),
   ),
-});
+}).describe("clause-simplification");
 
 function normalizeLanguage(language: string | undefined): SimplificationLanguage {
   switch (language?.toLowerCase()) {
@@ -88,7 +88,7 @@ export async function simplifyClauses<T extends { id: string; heading: string; t
 
   const normalizedLanguage = normalizeLanguage(language);
   const payload = clauses.map((clause) => `Clause ${clause.id}: ${clause.heading}\n${clause.text}`).join("\n\n");
-  const cacheKey = hashCacheKey(payload, DEFAULT_LLM_MODEL, `${SIMPLIFY_PROMPT_VERSION}:${normalizedLanguage}`);
+  const cacheKey = await hashCacheKey(payload, provider.modelLabel ?? DEFAULT_LLM_MODEL, `${SIMPLIFY_PROMPT_VERSION}:${normalizedLanguage}`);
   const cached = getCacheValue<SimplifiedClause[]>(cacheKey);
   if (cached) {
     return cached;

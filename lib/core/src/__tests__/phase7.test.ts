@@ -276,16 +276,16 @@ test("favours other party flips with the reader's perspective", async () => {
 });
 
 
-test("hashes the cache key from the combined pair text", () => {
+test("hashes the cache key from the combined pair text", async () => {
   const pair = alignClauses(baseVersion.clauses, revisedVersion.clauses).pairs.find(
     (candidate) => candidate.key === "C1~C1",
   );
   assert.ok(pair);
 
-  const key = materialChangeCacheKey(pair.before, pair.after);
+  const key = await materialChangeCacheKey(pair.before, pair.after);
   assert.equal(key.length, 64);
-  assert.equal(key, materialChangeCacheKey(pair.before, pair.after));
-  assert.notEqual(key, materialChangeCacheKey(pair.after, pair.before));
+  assert.equal(key, await materialChangeCacheKey(pair.before, pair.after));
+  assert.notEqual(key, await materialChangeCacheKey(pair.after, pair.before));
   assert.ok(smartModelLabel().length > 0);
 });
 
@@ -333,7 +333,7 @@ test("sends only the changed pairs to the smart model and caches each pair by it
   for (const row of secondRun.rows.filter((candidate) => candidate.kind === "changed")) {
     assert.equal(row.materialChange?.fromCache, true);
   }
-  assert.ok(getCacheValue<unknown>(materialChangeCacheKey(
+  assert.ok(getCacheValue<unknown>(await materialChangeCacheKey(
     baseVersion.clauses[0] as AlignableClause,
     revisedVersion.clauses[0] as AlignableClause,
   )));

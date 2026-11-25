@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { persistAuditEntry } from "./auditStore";
 
 export type AuditEntry = {
   id: string;
@@ -20,22 +21,46 @@ const MAX_CHAIN_LENGTH = 10_000;
  * the middle breaks every link after it and `verifyAuditChain` reports the
  * index of the first bad record.
  *
- * In-process only: the chain is lost on restart and is not shared between
- * instances. A durable store is required before this can serve as evidence
- * of anything, which is why `verifyAuditChain` is exposed over HTTP rather
- * than trusted silently.
+ * Entries are mirrored asynchronously when a durable store is configured;
+ * each process still owns its own chain and persistence is best-effort.
  */
 const auditChain: AuditEntry[] = [];
+const pendingWrites = new Set<Promise<boolean>>();
+let persistenceQueue = Promise.resolve();
+
+export function hashAuditIdentifier(identifier: string): string {
+  return createHash("sha256").update(identifier).digest("hex");
+}
 
 function hashEntry(prevHash: string, entry: Omit<AuditEntry, "hash">): string {
   return createHash("sha256")
-    .update(`${prevHash}|${entry.timestamp}|${entry.action}|${entry.userId}|${JSON.stringify(entry.payload)}`)
+    .update(`${prevHash}|${entry.timestamp}|${entry.action}|${entry.userId}|${canonicalJson(entry.payload)}`)
     .digest("hex");
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 /** Test hook: clears the chain so each test starts from genesis. */
 export function resetAuditChain(): void {
   auditChain.length = 0;
+}
+
+export function loadAuditChain(entries: AuditEntry[]): void {
+  auditChain.length = 0;
+  for (const entry of entries) {
+    auditChain.push({ ...entry, payload: { ...entry.payload } });
+  }
+}
+
+export async function flushAuditWrites(): Promise<void> {
+  await Promise.all([...pendingWrites]);
 }
 
 export function appendAuditLog(
@@ -60,6 +85,10 @@ export function appendAuditLog(
 
   const entry: AuditEntry = { ...unsigned, hash: hashEntry(prevHash, unsigned) };
   auditChain.push(entry);
+  const pendingWrite = persistenceQueue.then(() => persistAuditEntry(entry)).catch(() => false);
+  persistenceQueue = pendingWrite.then(() => undefined);
+  pendingWrites.add(pendingWrite);
+  void pendingWrite.finally(() => pendingWrites.delete(pendingWrite));
   return entry;
 }
 

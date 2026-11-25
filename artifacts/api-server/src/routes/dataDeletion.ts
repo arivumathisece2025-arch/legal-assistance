@@ -22,12 +22,11 @@ type PurgeOutcome = {
  * belongs to that caller (scoped by owner_id). Public documents are never
  * deleted here.
  *
- * CSRF and a tight rate limit are attached here rather than app-wide: this is
- * the only route that destroys data, and a global CSRF check would reject the
- * existing document/question endpoints, which send no CSRF header.
+ * App-wide CSRF protection guards every state-changing API route; this route
+ * also has a tighter rate limit because it can remove caller data.
  */
 router.post("/data/delete", rateLimit({ limit: 5, intervalMs: 60_000 }), csrfProtection, async (req, res): Promise<void> => {
-  const userId = req.session?.userId ?? "random";
+  const userId = req.session!.userId;
 
   const purgedIds = purgeDocumentsFor(userId);
 

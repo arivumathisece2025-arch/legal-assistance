@@ -22,14 +22,14 @@ test("batches classification into 25-clause provider calls", async () => {
     async completeJson<T>(_system: string, user: string, schema: z.ZodType<T>): Promise<T> {
       calls += 1;
       const batch = JSON.parse(user) as Array<{ id: string }>;
-      return schema.parse({ items: batch.map(({ id }) => ({ clauseId: id, type: "other" })) });
+      return schema.parse({ items: batch.map(({ id }) => ({ clauseId: id, type: "other", severity: "low", summary: "Summary" })) });
     },
   };
 
   const result = await classifyClauses(provider, clauses);
   assert.equal(calls, 8);
   assert.equal(result.length, 200);
-  assert.deepEqual(result[0], { clauseId: "C1", type: "other" });
+  assert.deepEqual(result[0], { clauseId: "C1", type: "other", severity: "low", summary: "Summary" });
 });
 
 test("uses a content-hash cache so identical 25-clause batches call the provider once", async () => {
@@ -40,7 +40,7 @@ test("uses a content-hash cache so identical 25-clause batches call the provider
     async completeJson<T>(_system: string, user: string, schema: z.ZodType<T>): Promise<T> {
       calls += 1;
       const batch = JSON.parse(user) as Array<{ id: string }>;
-      return schema.parse({ items: batch.map(({ id }) => ({ clauseId: id, type: "other" })) });
+      return schema.parse({ items: batch.map(({ id }) => ({ clauseId: id, type: "other", severity: "low", summary: "Summary" })) });
     },
   };
 
@@ -60,5 +60,5 @@ test("uses a content-hash cache so identical 25-clause batches call the provider
   assert.equal(calls, 1);
   assert.equal(first.length, 25);
   assert.equal(second.length, 25);
-  assert.deepEqual(first[0], { clauseId: "C1", type: "other" });
+  assert.deepEqual(first[0], { clauseId: "C1", type: "other", severity: "low", summary: "Summary" });
 });

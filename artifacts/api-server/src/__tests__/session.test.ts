@@ -6,7 +6,7 @@ import {
   serializeSession,
 } from "../middlewares/session";
 
-process.env.APP_ENCRYPTION_KEY = "middleware-test-key";
+process.env.APP_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 test("a session round-trips through serialize and parse", () => {
   const session = createSession("user-1");

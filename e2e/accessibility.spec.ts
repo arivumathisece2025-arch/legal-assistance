@@ -1,7 +1,8 @@
-import { test, expect, request } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 let testDocumentId: string;
+let testSessionCookie: string;
 
 // The API server runs on its own port; the frontend proxies `/api/*` to it.
 const apiBaseURL =
@@ -9,10 +10,8 @@ const apiBaseURL =
 
 const axeTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'];
 
-// Minimal valid 1-page PDF whose only text layer clears the API's
-// 20-characters-per-page floor (see lib/core/src/parsing/pdf.ts).
-const pdfBase64 =
-  'JVBERi0xLjQKJeLjz9MKMyAwIG9iago8PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL1Jlc291cmNlczw8L0ZvbnQ8PC9GMSA1IDAgUj4+Pj4vTWVkaWFCb3hbMCAwIDYxMiA3OTJdL0NvbnRlbnRzIDQgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvTGVuZ3RoIDY1Pj4Kc3RyZWFtCkJUCi9GMSA4IFRmCjEwMCA3MDAgVGQKKFRlc3QgRG9jdW1lbnQgZm9yIEFjY2Vzc2liaWxpdHkpIFRqCkVUCmVuZHN0cmVhbQplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PgplbmRvYmoKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKNSAwIG9iago8PC9UeXBlL0ZvbnQvU3VidHlwZS9UeXBlMS9CYXNlRm9udC9IZWx2ZXRpY2E+PgplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmDQowMDAwMDAwMjc5IDAwMDAwIG4NCjAwMDAwMDAyMjggMDAwMDAgbg0KMDAwMDAwMDAxNSAwMDAwMCBuDQowMDAwMDAwMTI0IDAwMDAwIG4NCjAwMDAwMDAzMjggMDAwMDAgbg0KdHJhaWxlcgo8PC9TaXplIDYvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgo0MDUKJSVFT0Y=';
+// Numbered content ensures the upload test exercises real clause segmentation.
+const accessibilityDocumentText = '1. Termination. Either party may end this agreement with thirty days written notice.';
 
 test.beforeAll(async ({ playwright }) => {
   const apiContext = await playwright.request.newContext({
@@ -22,12 +21,19 @@ test.beforeAll(async ({ playwright }) => {
   const form = new FormData();
   form.append(
     'file',
-    new Blob([Buffer.from(pdfBase64, 'base64')], { type: 'application/pdf' }),
-    'accessibility-audit.pdf',
+    new Blob([accessibilityDocumentText], { type: 'text/plain' }),
+    'accessibility-audit.txt',
   );
+
+  const sessionResponse = await apiContext.get('/api/session');
+  const { csrfToken } = await sessionResponse.json() as { csrfToken: string };
+  const sessionCookieValue = /cc_session=([^;]+)/.exec(sessionResponse.headers()['set-cookie'] ?? '')?.[1];
+  if (!sessionCookieValue) throw new Error('Could not extract test session cookie');
+  testSessionCookie = decodeURIComponent(sessionCookieValue);
 
   const response = await apiContext.post('/api/documents/upload', {
     multipart: form,
+    headers: { 'x-csrf-token': csrfToken },
   });
 
   if (!response.ok()) {
@@ -47,6 +53,16 @@ test.beforeAll(async ({ playwright }) => {
   }
 
   await apiContext.dispose();
+});
+
+test.beforeEach(async ({ context }) => {
+  await context.addCookies([{
+    name: 'cc_session',
+    value: testSessionCookie,
+    url: 'http://localhost:4173',
+    httpOnly: true,
+    sameSite: 'Strict',
+  }]);
 });
 
 

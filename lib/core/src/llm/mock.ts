@@ -5,10 +5,9 @@ import type { LLMProvider } from "./base";
 /**
  * `node:*` access that works in both ESM and CJS without a static import.
  *
- * `Function("return require('node:fs')")` is the trick used elsewhere in this
- * package, but it throws "require is not defined" under the ESM loader, so it
- * silently disabled fixture loading. `process.getBuiltinModule` is the
- * supported replacement on Node 22.5+.
+ * Dynamic function construction throws "require is not defined" under the ESM
+ * loader, so it silently disabled fixture loading. The supported built-in
+ * lookup is available on Node 22.5+.
  */
 function nodeBuiltin<T>(name: string): T | undefined {
   if (typeof process === "undefined" || !process.versions?.node) return undefined;
@@ -76,6 +75,7 @@ function defaultFixtureDir(): string {
 }
 
 export class MockProvider implements LLMProvider {
+  readonly modelLabel = "mock-fixture";
   private readonly fixtureDir: string;
 
   constructor(fixtureDir?: string) {
@@ -99,6 +99,29 @@ export class MockProvider implements LLMProvider {
         throw new Error(`Mock fixture validation failed: ${JSON.stringify(result.error.format())}`);
       }
       return result.data;
+    }
+
+    if (schema.description === "clause-classification") {
+      const input = JSON.parse(user) as Array<{ id: string; text: string }>;
+      return schema.parse({
+        items: input.map((clause) => ({
+          clauseId: clause.id,
+          type: "other",
+          severity: "low",
+          summary: clause.text.split(/[.!?]/)[0]?.slice(0, 160) ?? "",
+        })),
+      });
+    }
+
+    if (schema.description === "clause-simplification") {
+      const clauses = Array.from(user.matchAll(/Clause ([^:]+): ([^\n]+)\n([\s\S]*?)(?=\n\nClause |\n\nReturn JSON|$)/g));
+      return schema.parse({
+        items: clauses.flatMap(([, clauseId, _heading, text]) => ["as-written", "plain", "simple"].map((level) => ({
+          clauseId,
+          level,
+          text: text.trim(),
+        }))),
+      });
     }
 
     return {} as T;

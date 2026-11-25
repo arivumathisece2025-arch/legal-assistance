@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { QuestionInputLanguage } from './questionInputLanguage';
 import type { QuestionInputPerspective } from './questionInputPerspective';
 
 export interface QuestionInput {
@@ -12,4 +13,5 @@ export interface QuestionInput {
   /** @minLength 1 */
   question: string;
   perspective: QuestionInputPerspective;
+  language?: QuestionInputLanguage;
 }

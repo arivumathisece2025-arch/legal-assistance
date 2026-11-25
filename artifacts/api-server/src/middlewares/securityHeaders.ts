@@ -13,7 +13,9 @@ export const securityHeaders: RequestHandler = (req, res, next) => {
     [
       "default-src 'self'",
       "script-src 'self'",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self'",
+      // React style={{...}} props render style attributes, so keep this allowance attribute-only.
+      "style-src-attr 'unsafe-inline'",
       "img-src 'self' data:",
       "connect-src 'self'",
       "font-src 'self'",
@@ -27,6 +29,8 @@ export const securityHeaders: RequestHandler = (req, res, next) => {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
 
   if (req.secure || process.env.NODE_ENV === "production") {
     res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains");

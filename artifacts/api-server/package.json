@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development tsx watch src/index.ts",
-    "dev:once": "NODE_ENV=development tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "dev:once": "tsx src/index.ts",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
-    "test": "tsx --test src/__tests__/*.test.ts",
+    "test": "node ../../scripts/run-tests.mjs src/__tests__",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

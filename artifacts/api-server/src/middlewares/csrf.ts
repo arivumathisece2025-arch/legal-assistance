@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { RequestHandler } from "express";
+import { appendAuditLog, hashAuditIdentifier } from "../lib/auditLog";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 export const CSRF_HEADER = "x-csrf-token";
@@ -29,6 +30,10 @@ export const csrfProtection: RequestHandler = (req, res, next) => {
   const sent = req.get(CSRF_HEADER);
 
   if (!expected || !sent || !tokensMatch(sent, expected)) {
+    appendAuditLog("SESSION_CSRF_REJECTED", req.session?.userId ?? "unknown", {
+      method: req.method,
+      pathHash: hashAuditIdentifier(req.path),
+    });
     res.status(403).json({ error: "Invalid CSRF token" });
     return;
   }

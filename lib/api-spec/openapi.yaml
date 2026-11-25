@@ -15,6 +15,18 @@ tags:
   - name: questions
     description: Grounded document questions
 paths:
+  /session:
+    get:
+      operationId: getSession
+      tags: [health]
+      summary: Get the session CSRF token
+      responses:
+        "200":
+          description: Session security token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
   /healthz:
     get:
       operationId: healthCheck
@@ -100,6 +112,17 @@ paths:
                 $ref: "#/components/schemas/DocumentDetail"
         "404":
           description: Document not found
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: Delete an owned document
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "204":
+          description: Document deleted
+        "404":
+          description: Document not found or not owned by the caller
     post:
       operationId: analyzeDocument
       tags: [documents]
@@ -168,6 +191,28 @@ paths:
               schema:
                 type: string
                 description: Server-sent events stream with status, answer, and done events.
+  /documents/{id}/simplify:
+    post:
+      operationId: simplifyDocument
+      tags: [documents]
+      summary: Rewrite selected clauses in plain language
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimplifyInput"
+      responses:
+        "200":
+          description: Plain-language rewrites and validation flags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimplifyResponse"
+        "404":
+          description: Document not found
   /questions:
     post:
       operationId: askQuestion
@@ -195,6 +240,12 @@ components:
       schema:
         type: string
   schemas:
+    SessionResponse:
+      type: object
+      properties:
+        csrfToken:
+          type: string
+      required: [csrfToken]
     HealthStatus:
       type: object
       properties:
@@ -335,7 +386,46 @@ components:
         perspective:
           type: string
           enum: [party_a, party_b]
+        language:
+          type: string
+          enum: [en, ta, hi]
       required: [documentId, question, perspective]
+    SimplifyInput:
+      type: object
+      properties:
+        language:
+          type: string
+          enum: [en, ta, hi]
+        clauseIds:
+          type: array
+          items:
+            type: string
+      required: [language]
+    SimplifiedClause:
+      type: object
+      properties:
+        clauseId:
+          type: string
+        level:
+          type: string
+          enum: [as-written, plain, simple]
+        text:
+          type: string
+        flagged:
+          type: boolean
+        issues:
+          type: array
+          items:
+            type: string
+      required: [clauseId, level, text, flagged, issues]
+    SimplifyResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimplifiedClause"
+      required: [items]
     Citation:
       type: object
       properties:

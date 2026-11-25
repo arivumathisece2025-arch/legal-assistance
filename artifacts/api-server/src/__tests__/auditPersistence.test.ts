@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendAuditLog, resetAuditChain, type AuditEntry } from "../lib/auditLog";
-import { persistAuditEntry, readPersistedAuditEntries, type AuditStore } from "../lib/auditStore";
+import { appendAuditLog, flushAuditWrites, loadAuditChain, resetAuditChain, verifyAuditChain, type AuditEntry } from "../lib/auditLog";
+import { persistAuditEntry, readPersistedAuditEntries, setAuditStoreForTest, type AuditStore } from "../lib/auditStore";
 
 /**
  * ADDITIVE (scorecard item 1): verifies the DB-backed path writes and reads
@@ -23,7 +23,10 @@ function createFakeAuditStore(): AuditStore & { rows: AuditEntry[] } {
         hash: row.hash,
       });
     },
-    listEntries: async () => rows.map((entry) => ({ ...entry })),
+    listEntries: async () => rows.map((entry) => ({
+      ...entry,
+      payload: Object.fromEntries(Object.entries(entry.payload).sort(([left], [right]) => left < right ? 1 : -1)),
+    })),
   };
 }
 
@@ -66,4 +69,40 @@ test("audit persistence is a no-op without a configured store", async () => {
   const entry = appendAuditLog("TEST_EVENT", "user-1", { index: 0 });
   assert.equal(await persistAuditEntry(entry, null), false);
   assert.deepEqual(await readPersistedAuditEntries(null), []);
+});
+
+test("appendAuditLog persists entries and a reloaded chain verifies", async () => {
+  resetAuditChain();
+  const store = createFakeAuditStore();
+  setAuditStoreForTest(store);
+  try {
+    appendAuditLog("DOCUMENT_UPLOAD", "user-1", { documentIdHash: "a".repeat(64) });
+    appendAuditLog("DOCUMENT_ASK", "user-1", { z: 1, a: 2, documentIdHash: "b".repeat(64) });
+    await flushAuditWrites();
+
+    const persisted = await readPersistedAuditEntries();
+    assert.equal(persisted.length, 2);
+    resetAuditChain();
+    loadAuditChain(persisted);
+    assert.deepEqual(verifyAuditChain(), { valid: true, length: 2 });
+  } finally {
+    setAuditStoreForTest(undefined);
+    resetAuditChain();
+  }
+});
+
+test("audit persistence failures never prevent an entry from being appended", async () => {
+  resetAuditChain();
+  setAuditStoreForTest({
+    insertEntry: async () => { throw new Error("storage unavailable"); },
+    listEntries: async () => [],
+  });
+  try {
+    assert.doesNotThrow(() => appendAuditLog("TEST_EVENT", "user-1"));
+    await flushAuditWrites();
+    assert.deepEqual(verifyAuditChain(), { valid: true, length: 1 });
+  } finally {
+    setAuditStoreForTest(undefined);
+    resetAuditChain();
+  }
 });

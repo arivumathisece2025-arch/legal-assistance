@@ -5,10 +5,12 @@ import dataDeletionRouter from "./dataDeletion";
 import healthRouter from "./health";
 import documentsRouter from "./documents";
 import questionsRouter from "./questions";
+import sessionRouter from "./session";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(sessionRouter);
 router.use(audioRouter);
 router.use(documentsRouter);
 router.use(questionsRouter);

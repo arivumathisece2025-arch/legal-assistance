@@ -1,43 +1,35 @@
 # Benchmark Results
 
-Generated: 2026-09-26T06:21:12.181Z
-Node: v24.21.0
-Documents: 14 golden contracts
+Generated: 2026-11-25T15:02:19.489Z
+Node: v20.20.0
+Machine: win32 10.0.19045 (x64); Intel(R) Core(TM) i5-10310U CPU @ 1.70GHz
+Source: 150 clauses generated from 14 golden contracts
 Iterations per measurement: 200
 
-All figures below are **measured** wall-clock timings of the real
-`segmentDocument`, `evaluateRiskRules`, `retrieveClauses` and
-`MockProvider.completeJson` implementations in `lib/core`. No values are
-simulated or randomised.
+Timings are measured wall-clock values for the same in-memory 150-clause
+document. The deterministic provider is a test double; provider timings are
+not treated as model latency.
 
 | Metric | Mean (ms) | p50 (ms) | p95 (ms) | Max (ms) |
 | :--- | ---: | ---: | ---: | ---: |
-| parse + segment (2-clause doc) | 0.006 | 0.004 | 0.011 | 0.222 |
-| evaluateRiskRules (2-clause doc) | 0.059 | 0.051 | 0.104 | 2.499 |
-| retrieveClauses (BM25, 1 query) | 0.019 | 0.014 | 0.031 | 1.847 |
-| MockProvider.completeJson | 0.015 | 0.008 | 0.056 | 0.373 |
+| parse + segment (150 clauses) | 0.485 | 0.353 | 0.710 | 5.358 |
+| evaluateRiskRules (150 clauses) | 75.981 | 71.210 | 99.106 | 140.069 |
+| buildRetrievalIndex (150 clauses) | 2.991 | 2.435 | 5.853 | 8.727 |
+| retrieveFromIndex (one query) | 1.017 | 0.772 | 2.175 | 9.888 |
 
-## Derived
+## Measured counts
 
 | Metric | Value |
 | :--- | ---: |
-| Clauses segmented (total, all docs) | 28 |
-| Rule findings (total, all docs) | 2600 |
-| Retrieval queries measured | 15 |
-| LLM calls for a 2-clause doc | 1 |
-| LLM calls for a 200-clause doc | 8 |
+| Segmented clauses | 150 |
+| Classification calls on first pass | 6 |
+| Classification calls on identical cached pass | 0 |
+| Answer-cache repeated-question runs | 100 |
+| Answer-cache provider calls | 1 |
+| Answer-cache hits | 99 |
+| Answer-cache misses | 1 |
+| Answer-cache hit rate | 99.00% |
 
-`classifyClauses` batches at 25 clauses per call
-(`lib/core/src/classify.ts`), so call count grows as `ceil(n / 25)`:
-a 2-clause document costs 1 call and a 200-clause document costs 8 calls.
-
-## What these numbers do not say
-
-- `MockProvider` performs a local file read, so its timing is harness
-  overhead. It is **not** a model latency or token-cost measurement. Real
-  `GroqProvider` latency requires a live `GROQ_API_KEY` and network access.
-- TTFB, tokens-per-document and cold/warm cache timings are omitted rather
-  than invented, because nothing in this repository measures them. A streaming
-  endpoint would be needed to measure TTFB honestly.
-- The golden documents are 2 clauses each, so per-document timings reflect
-  that size, not a realistic 50-200 clause contract.
+Classification is made in 25-clause batches; the reported call counts are
+observed calls from the benchmark provider spy. Cache hit rate is observed
+from the exported answer-cache statistics for the repeated-question run.

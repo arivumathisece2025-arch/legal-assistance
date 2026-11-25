@@ -23,7 +23,12 @@ export default defineConfig({
       //    path, which refuses to store a document without it. The fallback is a
       //    throwaway value for local e2e runs only - set APP_ENCRYPTION_KEY in the
       //    environment (or a .env file) to use a real one.
-      command: 'PORT=3000 APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:-e2e-test-only-encryption-key} pnpm --filter @workspace/api-server run dev',
+      command: 'pnpm --filter @workspace/api-server run dev',
+      env: {
+        PORT: '3000',
+        MOCK_LLM: '1',
+        APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY ?? '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      },
       port: 3000,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
@@ -31,7 +36,12 @@ export default defineConfig({
     {
       // 2. Build and preview the frontend. API_PORT lets the Vite proxy
       //    forward the SPA's relative `/api/*` calls to the server above.
-      command: 'PORT=4173 BASE_PATH=/ API_PORT=3000 pnpm --filter @workspace/clause-compass run build && PORT=4173 BASE_PATH=/ API_PORT=3000 pnpm --filter @workspace/clause-compass run serve',
+      command: 'pnpm --filter @workspace/clause-compass run build && pnpm --filter @workspace/clause-compass run serve',
+      env: {
+        PORT: '4173',
+        BASE_PATH: '/',
+        API_PORT: '3000',
+      },
       port: 4173,
       reuseExistingServer: !process.env.CI,
       timeout: 180000,

@@ -139,11 +139,11 @@ function pairText(clause: AlignableClause): string {
 }
 
 /** Cache key for a pair: the combined hash of both clause versions. */
-export function materialChangeCacheKey(
+export async function materialChangeCacheKey(
   before: AlignableClause,
   after: AlignableClause,
   model: string = smartModelLabel(),
-): string {
+): Promise<string> {
   const combined = `${pairText(before)}\n\u0000\n${pairText(after)}`;
   return hashCacheKey(combined, model, MATERIAL_CHANGE_PROMPT_VERSION);
 }
@@ -158,7 +158,7 @@ export async function analyzeMaterialChange(
   provider: LLMProvider,
   model: string = smartModelLabel(),
 ): Promise<MaterialChangeNote> {
-  const cacheKey = materialChangeCacheKey(pair.before, pair.after, model);
+  const cacheKey = await materialChangeCacheKey(pair.before, pair.after, model);
   const cached = getCacheValue<MaterialChangeNote>(cacheKey);
   if (cached) {
     return { ...cached, fromCache: true };

@@ -17,6 +17,31 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _csrfToken: string | null = null;
+let _csrfTokenPromise: Promise<string> | null = null;
+
+export function getCsrfToken(): Promise<string> {
+  if (_csrfToken) return Promise.resolve(_csrfToken);
+  if (!_csrfTokenPromise) {
+    const requestBaseUrl = _baseUrl;
+    const request = fetch(`${requestBaseUrl ?? ""}/api/session`, { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to initialize request security.");
+        const payload = (await response.json()) as { csrfToken?: unknown };
+        if (typeof payload.csrfToken !== "string" || payload.csrfToken.length === 0) {
+          throw new Error("Unable to initialize request security.");
+        }
+        if (_baseUrl === requestBaseUrl) _csrfToken = payload.csrfToken;
+        return payload.csrfToken;
+      })
+      .catch((error: unknown) => {
+        if (_csrfTokenPromise === request) _csrfTokenPromise = null;
+        throw error;
+      });
+    _csrfTokenPromise = request;
+  }
+  return _csrfTokenPromise;
+}
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -26,7 +51,12 @@ let _authTokenGetter: AuthTokenGetter | null = null;
  * Pass `null` to clear the base URL.
  */
 export function setBaseUrl(url: string | null): void {
-  _baseUrl = url ? url.replace(/\/+$/, "") : null;
+  const nextBaseUrl = url ? url.replace(/\/+$/, "") : null;
+  if (_baseUrl !== nextBaseUrl) {
+    _baseUrl = nextBaseUrl;
+    _csrfToken = null;
+    _csrfTokenPromise = null;
+  }
 }
 
 /**
@@ -347,6 +377,10 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  if (!new Set(["GET", "HEAD", "OPTIONS"]).has(method)) {
+    headers.set("x-csrf-token", await getCsrfToken());
   }
 
   // Attach bearer token when an auth getter is configured and no

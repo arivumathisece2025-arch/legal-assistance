@@ -1,10 +1,6 @@
 /**
- * ADDITIVE (scorecard item 6): standalone TTL sweep sharing the exact cleanup
- * the upload path runs lazily. `persistEncryptedDocument` in
- * routes/documents.ts deletes expired rows before each insert; this module
- * exposes that same delete as a callable so a scheduled interval can run it
- * proactively. No-op when DATABASE_URL is unset (same pattern as document
- * storage). No new dependency: plain setInterval, unref'd so tests exit.
+ * Standalone database TTL sweep for stored documents. No-op when DATABASE_URL
+ * is unset. No new dependency: plain setInterval, unref'd so tests exit.
  */
 export async function sweepExpiredDocuments(now = new Date()): Promise<{ deleted: number; databaseConfigured: boolean }> {
   if (!process.env.DATABASE_URL) return { deleted: 0, databaseConfigured: false };

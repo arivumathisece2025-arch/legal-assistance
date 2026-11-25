@@ -22,10 +22,10 @@ Without this boundary, business logic tends to accumulate inside route
 handlers, coupling it to Express's request/response shape and making it
 slower to test. Keeping `lib/core` pure means every piece of domain logic —
 the PII redactor, the injection scanner, every risk rule, the citation
-verifier — has direct, dependency-free unit tests, using Node's built-in
-test runner (`tsx --test`), not an external test framework. As of the last
-verified run: 130 tests total (77 in `@workspace/core`, 53 in
-`@workspace/api-server`), all passing.
+verifier — has direct, dependency-free unit tests, using Node's built-in test
+runner through `scripts/run-tests.mjs` with `tsx`, not an external test
+framework. The latest verified `pnpm test` run contains 162 tests total (80 in
+`@workspace/core`, 82 in `@workspace/api-server`), all passing.
 
 ## Alternatives considered
 - **Logic inline in Express route handlers**: rejected — the default

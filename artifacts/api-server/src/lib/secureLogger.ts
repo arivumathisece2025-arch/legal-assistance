@@ -54,9 +54,8 @@ export type StructuredLogger = {
 /**
  * JSON-lines logger that redacts before writing.
  *
- * `error` deliberately does not redact: the redaction is applied by
- * `redactMeta` on the same path as `info`, so both are safe, and error
- * metadata is limited to codes and counts by the callers in this package.
+ * `error` uses the same redaction path as `info`, so bodies and prompts are
+ * represented by hashes and lengths rather than raw text at every log level.
  */
 export function createLogger(service: string): StructuredLogger {
   const write = (level: "INFO" | "WARN" | "ERROR", message: string, meta: SafeMeta = {}): void => {

@@ -2,16 +2,25 @@ import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
 import multer from "multer";
 import { Router, type IRouter } from "express";
 import { getKey } from "../lib/keys";
+import { createLogger } from "../lib/secureLogger";
+import { appendAuditLog, hashAuditIdentifier } from "../lib/auditLog";
 import {
   answerQuestion,
+  streamAnswerQuestion,
   compareVersions,
   GroqProvider,
   IngestionError,
   MockProvider,
+  classifyClauses,
   processUpload,
+  buildRetrievalIndex,
+  segmentDocument,
+  simplifyClauses,
   type AlignableClause,
   type Clause,
   type LLMProvider,
+  type ParsedDocument,
+  type RetrievalIndex,
 } from "@workspace/core";
 import {
   AnalyzeDocumentParams,
@@ -26,6 +35,8 @@ import {
   GetDocumentParams,
   GetDocumentResponse,
   ListDocumentsResponse,
+  SimplifyDocumentBody,
+  SimplifyDocumentResponse,
 } from "@workspace/api-zod";
 
 type DocumentRecord = {
@@ -53,6 +64,8 @@ type DocumentRecord = {
   }>;
   encryptedBlob?: string;
   expiresAt?: string;
+  retrievalIndex?: RetrievalIndex;
+  sourcePages?: ParsedDocument["pages"];
   clauses: Array<{
     id: string;
     ordinal: string;
@@ -68,6 +81,33 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
 });
+
+const secureLogger = createLogger("api-server");
+
+function toCoreClauses(clauses: DocumentRecord["clauses"]): Clause[] {
+  return clauses.map((clause, index) => ({
+    id: clause.id,
+    ordinal: clause.ordinal,
+    heading: clause.heading,
+    text: clause.text,
+    page: 1,
+    charStart: index,
+    charEnd: index + clause.text.length,
+  }));
+}
+
+function withRetrievalIndex(document: DocumentRecord): DocumentRecord {
+  return { ...document, retrievalIndex: buildRetrievalIndex(toCoreClauses(document.clauses)) };
+}
+
+function groqProvider(model?: string): GroqProvider {
+  return new GroqProvider({
+    ...(model ? { model } : {}),
+    onUpstreamError: (status, upstreamBody) => {
+      secureLogger.error("LLM upstream request failed", { status, body: upstreamBody });
+    },
+  });
+}
 
 function encryptBlob(bytes: Uint8Array): string {
   const secret = process.env.APP_ENCRYPTION_KEY;
@@ -98,8 +138,8 @@ async function persistEncryptedDocument(document: DocumentRecord, encryptedBlob:
   });
 }
 
-function toPublicDocument(document: DocumentRecord): Omit<DocumentRecord, "encryptedBlob"> {
-  const { encryptedBlob: _encryptedBlob, ...publicDocument } = document;
+function toPublicDocument(document: DocumentRecord): Omit<DocumentRecord, "encryptedBlob" | "retrievalIndex" | "sourcePages"> {
+  const { encryptedBlob: _encryptedBlob, retrievalIndex: _retrievalIndex, sourcePages: _sourcePages, ...publicDocument } = document;
   return publicDocument;
 }
 
@@ -242,12 +282,29 @@ const seedRevisedDocument: DocumentRecord = {
 };
 
 const documents = new Map<string, DocumentRecord>([
-  [seedDocument.id, seedDocument],
-  [seedRevisedDocument.id, seedRevisedDocument],
+  [seedDocument.id, withRetrievalIndex(seedDocument)],
+  [seedRevisedDocument.id, withRetrievalIndex(seedRevisedDocument)],
 ]);
+const MAX_USER_DOCUMENTS = 200;
+
+function touchDocument(id: string, document: DocumentRecord): DocumentRecord {
+  documents.delete(id);
+  documents.set(id, document);
+  return document;
+}
+
+function storeDocument(document: DocumentRecord): void {
+  touchDocument(document.id, document);
+  while (Array.from(documents.values()).filter((record) => record.ownerId !== "public").length > MAX_USER_DOCUMENTS) {
+    const leastRecentlyUsed = Array.from(documents.entries()).find(([, record]) => record.ownerId !== "public");
+    if (!leastRecentlyUsed) break;
+    documents.delete(leastRecentlyUsed[0]);
+  }
+}
 
 export function getDocumentRecord(id: string): DocumentRecord | undefined {
-  return documents.get(id);
+  const document = documents.get(id);
+  return document ? touchDocument(id, document) : undefined;
 }
 
 /**
@@ -261,15 +318,26 @@ export function getAccessibleDocument(id: string, userId: string): DocumentRecor
   const document = documents.get(id);
   if (!document) return undefined;
 
-  if (document.expiresAt && Date.now() > new Date(document.expiresAt).getTime()) {
+  if (document.expiresAt && Date.now() >= new Date(document.expiresAt).getTime()) {
     documents.delete(id);
     return undefined;
   }
 
   if (document.ownerId === userId || document.ownerId === "public") {
-    return document;
+    return touchDocument(id, document);
   }
   return undefined;
+}
+
+export function sweepExpiredMemoryDocuments(now: Date = new Date()): string[] {
+  const expiredIds: string[] = [];
+  for (const [id, document] of documents) {
+    if (document.expiresAt && new Date(document.expiresAt).getTime() <= now.getTime()) {
+      documents.delete(id);
+      expiredIds.push(id);
+    }
+  }
+  return expiredIds;
 }
 
 /**
@@ -279,7 +347,7 @@ export function getAccessibleDocument(id: string, userId: string): DocumentRecor
 export function purgeDocumentsFor(userId: string): string[] {
   const purged: string[] = [];
   for (const [id, document] of documents) {
-    if (document.ownerId === userId) {
+    if (document.ownerId === userId && document.ownerId !== "public") {
       documents.delete(id);
       purged.push(id);
     }
@@ -306,35 +374,58 @@ function answerProvider(): LLMProvider {
   }
 
   const smartModel = process.env.GROQ_MODEL_SMART ?? process.env.GROQ_MODEL_FAST;
-  return new GroqProvider(smartModel ? { model: smartModel } : {});
+  return groqProvider(smartModel);
+}
+
+async function classifyDocumentPages(pages: ParsedDocument["pages"]): Promise<DocumentRecord["clauses"]> {
+  const parsed: ParsedDocument = { pageCount: pages.length, pages, headings: [], isScanned: false };
+  const clauses = segmentDocument(parsed);
+  if (!clauses.length) return [];
+
+  const classifications = await classifyClauses(answerProvider(), clauses);
+  const byId = new Map(classifications.map((classification) => [classification.clauseId, classification]));
+  return clauses.map((clause) => {
+    const classification = byId.get(clause.id);
+    return {
+      id: clause.id,
+      ordinal: clause.ordinal,
+      heading: clause.heading,
+      type: classification?.type ?? "other",
+      severity: classification?.severity ?? "low",
+      summary: classification?.summary || clause.text.split(/[.!?]/)[0]?.slice(0, 160) || clause.heading,
+      text: clause.text,
+    };
+  });
 }
 
 /**
- * @param perspective Accepted for API compatibility with both ask routes.
- *   It is currently unused: the previous inline stub branched on it when
- *   phrasing its canned quote, and the real provider path does not yet put
- *   perspective into the system prompt. Threading it into `answerQuestion` is
- *   a real follow-up, so the parameter is kept rather than silently removed
- *   from a signature two routes depend on.
+ * Perspective participates in answer caching so the same question can be
+ * prepared independently for either party.
  */
-export async function answerDocumentQuestion(documentId: string, userId: string, question: string, perspective: "party_a" | "party_b", language: string = "en") {
-  void perspective;
+export async function answerDocumentQuestion(
+  documentId: string,
+  userId: string,
+  question: string,
+  perspective: "party_a" | "party_b",
+  language: string = "en",
+  stream?: { onToken: (token: string) => void; signal: AbortSignal },
+) {
   const document = getAccessibleDocument(documentId, userId);
   if (!document) {
     throw new Error("Document not found");
   }
 
-  const clauses: Clause[] = document.clauses.map((clause) => ({
-    id: clause.id,
-    ordinal: clause.ordinal,
-    heading: clause.heading,
-    text: clause.text,
-    page: 1,
-    charStart: 0,
-    charEnd: clause.text.length,
-  }));
+  const clauses = document.retrievalIndex?.clauses ?? toCoreClauses(document.clauses);
 
-  const result = await answerQuestion(question, clauses, answerProvider(), language);
+  const provider = answerProvider();
+  const answerOptions = {
+    retrievalIndex: document.retrievalIndex,
+    cacheScope: document.id,
+    perspective,
+  };
+  const result = stream
+    ? await streamAnswerQuestion(question, clauses, provider, language, answerOptions, stream.onToken, stream.signal)
+    : await answerQuestion(question, clauses, provider, language, answerOptions);
   const citations = result.citations.map((clauseId) => {
     const clause = document.clauses.find((candidate) => candidate.id === clauseId);
     return {
@@ -343,13 +434,15 @@ export async function answerDocumentQuestion(documentId: string, userId: string,
     };
   });
 
-  return AskQuestionResponse.parse({
+  const response = AskQuestionResponse.parse({
     answer: result.answer,
     citations,
     groundingRatio: result.groundingRatio,
     adviceMode: result.adviceMode,
     queued: false,
   });
+  appendAuditLog("DOCUMENT_ASK", userId, { documentIdHash: hashAuditIdentifier(document.id) });
+  return response;
 }
 
 const router: IRouter = Router();
@@ -384,16 +477,9 @@ router.post("/documents/upload", (req, res, next): void => {
     const id = `doc-${randomUUID()}`;
     const uploadedAt = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const ownerId = req.session?.userId ?? "public";
-    const clauses = processed.redactedPages.map((page) => ({
-      id: `P${page.pageNumber}`,
-      ordinal: String(page.pageNumber),
-      heading: `Page ${page.pageNumber}`,
-      type: "other",
-      severity: "low" as const,
-      summary: page.text.split("\n")[0]?.slice(0, 160) ?? "",
-      text: page.text,
-    }));
+    const ownerId = req.session!.userId;
+    const sourcePages = processed.redactedPages;
+    const clauses = await classifyDocumentPages(sourcePages);
     const document: DocumentRecord = {
       id,
       ownerId,
@@ -413,12 +499,15 @@ router.post("/documents/upload", (req, res, next): void => {
       })),
       injectionFindings: processed.securityFindings,
       clauses,
+      sourcePages,
+      retrievalIndex: buildRetrievalIndex(toCoreClauses(clauses)),
     };
     const encryptedBlob = encryptBlob(req.file.buffer);
     document.encryptedBlob = encryptedBlob;
     document.expiresAt = expiresAt;
     await persistEncryptedDocument(document, encryptedBlob, expiresAt);
-    documents.set(id, document);
+    storeDocument(document);
+    appendAuditLog("DOCUMENT_UPLOAD", ownerId, { documentIdHash: hashAuditIdentifier(id), fileType: document.fileType });
     res.status(201).json(toPublicDocument(document));
   } catch (error) {
     if (error instanceof IngestionError) {
@@ -439,10 +528,11 @@ router.post("/documents", (req, res): void => {
   const id = `doc-${randomUUID()}`;
   const document: DocumentRecord = {
     id,
-    ownerId: req.session?.userId ?? "public",
+    ownerId: req.session!.userId,
     name: parsed.data.name,
     fileType: parsed.data.fileType.toUpperCase(),
     uploadedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     status: "uploaded",
     pageCount: 0,
     clauseCount: 0,
@@ -452,10 +542,12 @@ router.post("/documents", (req, res): void => {
     securityFindings: [],
     injectionFindings: [],
     clauses: [],
+    retrievalIndex: buildRetrievalIndex([]),
   };
 
-  documents.set(id, document);
-  res.status(201).json(CreateDocumentResponse.parse(document));
+  storeDocument(document);
+  appendAuditLog("DOCUMENT_UPLOAD", req.session!.userId, { documentIdHash: hashAuditIdentifier(id), fileType: document.fileType });
+  res.status(201).json(CreateDocumentResponse.parse(toPublicDocument(document)));
 });
 
 router.get("/documents/:id", (req, res): void => {
@@ -474,6 +566,37 @@ router.get("/documents/:id", (req, res): void => {
   res.json(GetDocumentResponse.parse(toPublicDocument(document)));
 });
 
+router.delete("/documents/:id", async (req, res): Promise<void> => {
+  const params = GetDocumentParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const userId = req.session?.userId ?? "";
+  const document = getAccessibleDocument(params.data.id, userId);
+  if (!document || document.ownerId !== userId || document.ownerId === "public") {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+
+  try {
+    if (process.env.DATABASE_URL) {
+      const { and, eq } = await import("drizzle-orm");
+      const { db, storedDocuments } = await import("@workspace/db");
+      await db.delete(storedDocuments).where(and(
+        eq(storedDocuments.id, document.id),
+        eq(storedDocuments.ownerId, userId),
+      ));
+    }
+    documents.delete(document.id);
+    appendAuditLog("DOCUMENT_DELETE", userId, { documentIdHash: hashAuditIdentifier(document.id) });
+    res.status(204).end();
+  } catch {
+    res.status(500).json({ code: "DOCUMENT_DELETE_FAILED", message: "Document could not be deleted." });
+  }
+});
+
 router.post("/documents/:id/ask", async (req, res): Promise<void> => {
   const params = GetDocumentParams.safeParse(req.params);
   if (!params.success) {
@@ -487,10 +610,7 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
     return;
   }
 
-  const payload = {
-    ...req.body,
-    documentId: req.body.documentId ?? params.data.id,
-  };
+  const payload = { ...req.body, documentId: params.data.id };
   const parsed = AskQuestionBody.safeParse(payload);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -498,7 +618,13 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
   }
 
   const wantsSse = req.headers.accept?.includes("text/event-stream") || req.query.stream === "sse";
+  const controller = wantsSse ? new AbortController() : undefined;
+  const abortOnDisconnect = () => {
+    if (controller && (req.aborted || (res.destroyed && !res.writableEnded))) controller.abort();
+  };
   if (wantsSse) {
+    req.on("close", abortOnDisconnect);
+    res.on("close", abortOnDisconnect);
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
@@ -507,20 +633,38 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
   }
 
   try {
-    const result = await answerDocumentQuestion(parsed.data.documentId, req.session?.userId ?? "", parsed.data.question, parsed.data.perspective, "en");
+    const result = await answerDocumentQuestion(
+      parsed.data.documentId,
+      req.session?.userId ?? "",
+      parsed.data.question,
+      parsed.data.perspective,
+      parsed.data.language ?? "en",
+      wantsSse && controller
+        ? {
+          signal: controller.signal,
+          onToken: (token: string) => {
+            if (!res.destroyed && !res.writableEnded) res.write(`event: token\ndata: ${JSON.stringify({ token })}\n\n`);
+          },
+        }
+        : undefined,
+    );
 
     if (wantsSse) {
-      res.write(`event: answer\ndata: ${JSON.stringify(result)}\n\n`);
-      res.write("event: done\ndata: {\"ok\":true}\n\n");
-      res.end();
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(`event: answer\ndata: ${JSON.stringify(result)}\n\n`);
+        res.write("event: done\ndata: {\"ok\":true}\n\n");
+        res.end();
+      }
       return;
     }
 
     res.json(result);
   } catch (error) {
     if (wantsSse) {
-      res.write(`event: error\ndata: ${JSON.stringify({ message: "Answer could not be generated." })}\n\n`);
-      res.end();
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(`event: error\ndata: ${JSON.stringify({ code: "ASK_FAILED", message: "Answer could not be generated." })}\n\n`);
+        res.end();
+      }
       return;
     }
 
@@ -530,6 +674,42 @@ router.post("/documents/:id/ask", async (req, res): Promise<void> => {
     }
 
     res.status(500).json({ code: "ASK_FAILED", message: "Answer could not be generated." });
+  } finally {
+    if (wantsSse) {
+      req.off("close", abortOnDisconnect);
+      res.off("close", abortOnDisconnect);
+    }
+  }
+});
+
+router.post("/documents/:id/simplify", async (req, res): Promise<void> => {
+  const params = GetDocumentParams.safeParse(req.params);
+  const body = SimplifyDocumentBody.safeParse(req.body ?? {});
+  if (!params.success || !body.success) {
+    res.status(400).json({ error: params.success ? body.error?.message : params.error.message });
+    return;
+  }
+
+  const document = getAccessibleDocument(params.data.id, req.session?.userId ?? "");
+  if (!document) {
+    res.status(404).json({ error: "Document not found" });
+    return;
+  }
+
+  const clauseIds = body.data.clauseIds;
+  const clauses = clauseIds
+    ? document.clauses.filter((clause) => clauseIds.includes(clause.id))
+    : document.clauses;
+  if (clauseIds && clauses.length !== new Set(clauseIds).size) {
+    res.status(400).json({ error: "One or more clauseIds do not belong to this document." });
+    return;
+  }
+
+  try {
+    const items = await simplifyClauses(clauses, answerProvider(), body.data.language);
+    res.json(SimplifyDocumentResponse.parse({ items }));
+  } catch {
+    res.status(500).json({ code: "SIMPLIFY_FAILED", message: "Plain-language rewrite failed." });
   }
 });
 
@@ -554,7 +734,7 @@ function versionDiffProvider() {
   }
 
   const smartModel = process.env.GROQ_MODEL_SMART ?? process.env.GROQ_MODEL_FAST;
-  return new GroqProvider(smartModel ? { model: smartModel } : {});
+  return groqProvider(smartModel);
 }
 
 router.post("/documents/:id/compare", async (req, res): Promise<void> => {
@@ -601,16 +781,20 @@ router.post("/documents/:id/compare", async (req, res): Promise<void> => {
       { perspective, provider: versionDiffProvider() },
     );
 
+    appendAuditLog("DOCUMENT_COMPARE", userId, {
+      baseDocumentIdHash: hashAuditIdentifier(baseDocument.id),
+      revisedDocumentIdHash: hashAuditIdentifier(revisedDocument.id),
+    });
     res.json(CompareDocumentVersionsResponse.parse(comparison));
   } catch (error) {
     res.status(500).json({
       code: "COMPARE_FAILED",
-      message: error instanceof Error ? error.message : "Comparison failed",
+      message: "Comparison failed.",
     });
   }
 });
 
-router.post("/documents/:id", (req, res): void => {
+router.post("/documents/:id", async (req, res): Promise<void> => {
   const params = AnalyzeDocumentParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -623,17 +807,29 @@ router.post("/documents/:id", (req, res): void => {
     return;
   }
 
-  const readyDocument = document.clauses.length > 0 ? document : seedDocument;
-  const analyzed = {
-    ...readyDocument,
-    id: document.id,
-    name: document.name,
-    fileType: document.fileType,
-    uploadedAt: document.uploadedAt,
-    status: "ready" as const,
-  };
-  documents.set(document.id, analyzed);
-  res.status(202).json(AnalyzeDocumentResponse.parse(analyzed));
+  if (!document.sourcePages?.length) {
+    res.status(409).json({ code: "DOCUMENT_TEXT_REQUIRED", message: "This workspace has no source text to analyze." });
+    return;
+  }
+
+  try {
+    const clauses = await classifyDocumentPages(document.sourcePages);
+    if (!clauses.length) {
+      res.status(409).json({ code: "CLAUSES_NOT_FOUND", message: "No clauses could be segmented from this document." });
+      return;
+    }
+    const analyzed: DocumentRecord = {
+      ...document,
+      clauses,
+      clauseCount: clauses.length,
+      status: "ready",
+      retrievalIndex: buildRetrievalIndex(toCoreClauses(clauses)),
+    };
+    storeDocument(analyzed);
+    res.status(202).json(AnalyzeDocumentResponse.parse(toPublicDocument(analyzed)));
+  } catch {
+    res.status(500).json({ code: "ANALYSIS_FAILED", message: "Document analysis failed." });
+  }
 });
 
 export default router;

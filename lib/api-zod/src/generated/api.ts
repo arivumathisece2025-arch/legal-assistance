@@ -9,6 +9,14 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Get the session CSRF token
+ */
+export const GetSessionResponse = zod.object({
+  "csrfToken": zod.string()
+})
+
+
+/**
  * Returns server health status
  * @summary Health check
  */
@@ -171,6 +179,16 @@ export const GetDocumentResponse = zod.object({
 
 
 /**
+ * @summary Delete an owned document
+ */
+export const DeleteDocumentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const DeleteDocumentResponse = zod.void()
+
+
+/**
  * @summary Start deterministic document analysis
  */
 export const AnalyzeDocumentParams = zod.object({
@@ -297,7 +315,8 @@ export const AskDocumentQuestionParams = zod.object({
 export const AskDocumentQuestionBody = zod.object({
   "documentId": zod.string(),
   "question": zod.string().min(1),
-  "perspective": zod.enum(['party_a', 'party_b'])
+  "perspective": zod.enum(['party_a', 'party_b']),
+  "language": zod.enum(['en', 'ta', 'hi']).optional()
 })
 
 export const AskDocumentQuestionResponse = zod.object({
@@ -313,6 +332,29 @@ export const AskDocumentQuestionResponse = zod.object({
 
 
 /**
+ * @summary Rewrite selected clauses in plain language
+ */
+export const SimplifyDocumentParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const SimplifyDocumentBody = zod.object({
+  "language": zod.enum(['en', 'ta', 'hi']),
+  "clauseIds": zod.array(zod.string()).optional()
+})
+
+export const SimplifyDocumentResponse = zod.object({
+  "items": zod.array(zod.object({
+  "clauseId": zod.string(),
+  "level": zod.enum(['as-written', 'plain', 'simple']),
+  "text": zod.string(),
+  "flagged": zod.boolean(),
+  "issues": zod.array(zod.string())
+}))
+})
+
+
+/**
  * @summary Ask a grounded question about a document
  */
 
@@ -321,7 +363,8 @@ export const AskDocumentQuestionResponse = zod.object({
 export const AskQuestionBody = zod.object({
   "documentId": zod.string(),
   "question": zod.string().min(1),
-  "perspective": zod.enum(['party_a', 'party_b'])
+  "perspective": zod.enum(['party_a', 'party_b']),
+  "language": zod.enum(['en', 'ta', 'hi']).optional()
 })
 
 export const AskQuestionResponse = zod.object({

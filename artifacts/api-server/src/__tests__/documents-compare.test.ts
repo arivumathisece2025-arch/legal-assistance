@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
+import { sessionHeaders } from "./csrfTestUtils";
 
-process.env.APP_ENCRYPTION_KEY = "integration-test-key";
+process.env.APP_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const { default: app } = await import("../app");
 
 type ComparisonResponse = {
@@ -42,9 +43,10 @@ async function withServer<T>(callback: (baseUrl: string) => Promise<T>): Promise
 }
 
 async function compare(baseUrl: string, revisedId: string, against: string, perspective = "party_b") {
+  const auth = await sessionHeaders(baseUrl);
   return fetch(`${baseUrl}/api/documents/${revisedId}/compare`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: auth.cookie, "x-csrf-token": auth.csrfToken },
     body: JSON.stringify({ against, perspective }),
   });
 }

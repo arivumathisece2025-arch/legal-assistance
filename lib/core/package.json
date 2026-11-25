@@ -3,13 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./exports": "./src/exports.ts",
+    "./rules": "./src/rules/packV1.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/__tests__/*.test.ts",
-    "test:coverage": "tsx --test --experimental-test-coverage src/__tests__/*.test.ts"
+    "test": "node ../../scripts/run-tests.mjs src/__tests__",
+    "test:coverage": "node ../../scripts/run-tests.mjs src/__tests__ --coverage"
   },
   "dependencies": {
     "mammoth": "^1.12.3",

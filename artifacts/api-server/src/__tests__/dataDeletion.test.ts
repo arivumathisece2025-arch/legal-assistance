@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
 import { createServer } from "node:http";
 import { parseSession, SESSION_COOKIE } from "../middlewares/session";
-import { resetAuditChain, verifyAuditChain } from "../lib/auditLog";
+import { listAuditLog, resetAuditChain, verifyAuditChain } from "../lib/auditLog";
 import { resetRateLimits } from "../middlewares/rateLimit";
 import { purgeDocumentsFor } from "../routes/documents";
 
-process.env.APP_ENCRYPTION_KEY = "data-deletion-test-key";
+process.env.APP_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.MOCK_LLM = "1";
 delete process.env.DATABASE_URL;
 
 const { default: app } = await import("../app");
@@ -72,7 +73,7 @@ test("an authenticated deletion really removes only the caller's documents", asy
     form.append("file", new Blob([`1. Test clause. This is private.`], { type: "text/plain" }), "private.txt");
     const uploadResponse = await fetch(`${baseUrl}/api/documents/upload`, {
       method: "POST",
-      headers: { cookie },
+      headers: { cookie, "x-csrf-token": csrfToken },
       body: form,
     });
     assert.equal(uploadResponse.status, 201);
@@ -126,21 +127,33 @@ test("a deletion request is written to the audit chain", async () => {
       headers: { cookie, "x-csrf-token": csrfToken },
     });
 
-    const response = await fetch(`${baseUrl}/api/audit`);
-    const body = (await response.json()) as { entries: Array<{ action: string; userId: string }> };
-
-    assert.ok(body.entries.some((entry) => entry.action === "DATA_DELETION_REQUEST"));
+    const entries = listAuditLog();
+    assert.ok(entries.some((entry) => entry.action === "DATA_DELETION_REQUEST"));
     assert.equal(verifyAuditChain().valid, true);
+  });
+});
+
+test("audit routes never expose entries over HTTP", async () => {
+  await withServer(async (baseUrl) => {
+    const entriesResponse = await fetch(`${baseUrl}/api/audit`);
+    assert.equal(entriesResponse.status, 404);
+
+    const verifyResponse = await fetch(`${baseUrl}/api/audit/verify`);
+    const body = (await verifyResponse.json()) as Record<string, unknown>;
+    assert.equal(verifyResponse.status, 200);
+    assert.deepEqual(Object.keys(body).sort(), ["length", "valid"]);
   });
 });
 
 test("the audit chain verifies over HTTP", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/audit/verify`);
-    const body = (await response.json()) as { valid: boolean };
+    const body = (await response.json()) as { valid: boolean; length: number };
 
     assert.equal(response.status, 200);
     assert.equal(body.valid, true);
+    assert.equal(body.length, 0);
+    assert.deepEqual(Object.keys(body).sort(), ["length", "valid"]);
   });
 });
 

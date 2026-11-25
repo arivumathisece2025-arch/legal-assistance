@@ -15,12 +15,10 @@ export type StoredDocument = typeof storedDocuments.$inferSelect;
 export type NewStoredDocument = typeof storedDocuments.$inferInsert;
 
 /**
- * ADDITIVE (scorecard item 1): durable mirror of the in-process hash-chained
- * audit log (`artifacts/api-server/src/lib/auditLog.ts`). The in-memory chain
- * stays authoritative for tamper detection; this table exists so entries
- * survive a process restart. Rows are append-only by convention (no
- * update/delete API is exposed). Requires `drizzle-kit push` before inserts
- * succeed in a provisioned database.
+ * Durable mirror of the in-process hash-chained audit log. When DATABASE_URL
+ * is configured, api-server startup ensures this table exists before loading
+ * persisted entries. Rows are append-only by convention (no update/delete API
+ * is exposed), not by database-enforced WORM policy.
  */
 export const auditLogEntries = pgTable("audit_log_entries", {
 	id: uuid("id").defaultRandom().primaryKey(),

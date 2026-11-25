@@ -28,6 +28,9 @@ import type {
   DocumentUploadResponse,
   HealthStatus,
   QuestionInput,
+  SessionResponse,
+  SimplifyInput,
+  SimplifyResponse,
   UploadDocumentBody,
   VersionComparison
 } from './api.schemas';
@@ -58,6 +61,83 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetSessionUrl = () => {
+
+
+
+
+  return `/api/session`
+}
+
+/**
+ * @summary Get the session CSRF token
+ */
+export const getSession = async ( options?: Parameters<typeof customFetch>[1]): Promise<SessionResponse> => {
+
+  return customFetch<SessionResponse>(getGetSessionUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSessionQueryKey = () => {
+    return [
+    `/api/session`
+    ] as const;
+    }
+
+
+export const getGetSessionQueryOptions = <TData = Awaited<ReturnType<typeof getSession>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSessionQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSession>>> = ({ signal }) => getSession({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSessionQueryResult = NonNullable<Awaited<ReturnType<typeof getSession>>>
+export type GetSessionQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the session CSRF token
+ */
+
+export function useGetSession<TData = Awaited<ReturnType<typeof getSession>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSessionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getHealthCheckUrl = () => {
 
@@ -455,6 +535,80 @@ export function useGetDocument<TData = Awaited<ReturnType<typeof getDocument>>, 
 
 
 
+export const getDeleteDocumentUrl = (id: string,) => {
+
+
+
+
+  return `/api/documents/${id}`
+}
+
+/**
+ * @summary Delete an owned document
+ */
+export const deleteDocument = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteDocumentUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteDocumentMutationKey = () => ['deleteDocument'] as const;
+
+export const getDeleteDocumentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDocument>>, TError,DeleteDocumentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteDocument>>, TError,DeleteDocumentMutationVariables, TContext> => {
+
+const mutationKey = getDeleteDocumentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteDocument>>, DeleteDocumentMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteDocument(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteDocument>>>
+
+    export type DeleteDocumentMutationError = ErrorType<void>
+    export type DeleteDocumentMutationVariables = {id: string}
+
+    /**
+ * @summary Delete an owned document
+ */
+export const useDeleteDocument = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDocument>>, TError,DeleteDocumentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteDocument>>,
+        TError,
+        DeleteDocumentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteDocumentMutationOptions(options));
+    }
+
 export const getAnalyzeDocumentUrl = (id: string,) => {
 
 
@@ -706,6 +860,95 @@ export const useAskDocumentQuestion = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getAskDocumentQuestionMutationOptions(options));
+    }
+
+export const getSimplifyDocumentUrl = (id: string,) => {
+
+
+
+
+  return `/api/documents/${id}/simplify`
+}
+
+/**
+ * @summary Rewrite selected clauses in plain language
+ */
+export const simplifyDocument = async (id: string,
+    simplifyInput: SimplifyInput, options?: Parameters<typeof customFetch>[1]): Promise<SimplifyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SimplifyResponse>(getSimplifyDocumentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(simplifyInput)
+  }
+);}
+
+
+
+
+
+export const getSimplifyDocumentMutationKey = () => ['simplifyDocument'] as const;
+
+export const getSimplifyDocumentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simplifyDocument>>, TError,SimplifyDocumentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof simplifyDocument>>, TError,SimplifyDocumentMutationVariables, TContext> => {
+
+const mutationKey = getSimplifyDocumentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof simplifyDocument>>, SimplifyDocumentMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  simplifyDocument(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SimplifyDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof simplifyDocument>>>
+    export type SimplifyDocumentMutationBody = BodyType<SimplifyInput>
+    export type SimplifyDocumentMutationError = ErrorType<void>
+    export type SimplifyDocumentMutationVariables = {id: string;data: BodyType<SimplifyInput>}
+
+    /**
+ * @summary Rewrite selected clauses in plain language
+ */
+export const useSimplifyDocument = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof simplifyDocument>>, TError,SimplifyDocumentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof simplifyDocument>>,
+        TError,
+        SimplifyDocumentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSimplifyDocumentMutationOptions(options));
     }
 
 export const getAskQuestionUrl = () => {

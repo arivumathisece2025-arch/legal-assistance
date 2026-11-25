@@ -1,12 +1,16 @@
 import { writeFileSync } from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { answerQuestion } from "../lib/core/src/answer";
+import { clearCache, getCacheStats } from "../lib/core/src/cache";
+import { classifyClauses } from "../lib/core/src/classify";
 import { parsePlainText } from "../lib/core/src/ingestion";
-import { segmentDocument } from "../lib/core/src/segment";
+import type { LLMProvider } from "../lib/core/src/llm/base";
+import { buildRetrievalIndex, retrieveFromIndex } from "../lib/core/src/retrieval";
 import { evaluateRiskRules } from "../lib/core/src/rules/packV1";
-import { retrieveClauses } from "../lib/core/src/retrieval";
-import { MockProvider } from "../lib/core/src/llm/mock";
+import { segmentDocument } from "../lib/core/src/segment";
 import { goldenSet, renderContractText } from "./fixtures/goldenSet";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -29,110 +33,123 @@ const fmt = (value: number) => value.toFixed(3);
 async function runPerf() {
   const segmentTimes: number[] = [];
   const ruleTimes: number[] = [];
+  const indexBuildTimes: number[] = [];
   const retrievalTimes: number[] = [];
-  const classifyTimes: number[] = [];
+  const fixtureClauses = goldenSet.flatMap((contract) => segmentDocument(parsePlainText(renderContractText(contract))));
+  if (!fixtureClauses.length) throw new Error("Golden fixtures did not produce any clauses.");
 
-  // Real provider call timing. MockProvider reads from disk, so this measures
-  // harness overhead only - it is NOT a model latency measurement.
-  const provider = new MockProvider();
-  const classificationSchema = {
-    parse: (value: unknown) => value,
-    safeParse: (value: unknown) => ({ success: true, data: value }),
-    description: "clause-classification",
-  } as never;
+  const documentText = Array.from({ length: 150 }, (_, index) => {
+    const source = fixtureClauses[index % fixtureClauses.length]!;
+    const text = source.text.replace(/^\s*\d+(?:\.\d+)*[.)]?\s+/, "").replace(/\s+/g, " ").trim();
+    return `${index + 1}. ${source.heading}\n${text} Performance fixture clause ${index + 1}.`;
+  }).join("\n\n");
+  const parsedDocument = parsePlainText(documentText);
+  const clauses = segmentDocument(parsedDocument);
+  if (clauses.length !== 150) throw new Error(`Expected 150 benchmark clauses, got ${clauses.length}.`);
 
-  let totalClauses = 0;
-  let totalFindings = 0;
-  let retrievalQueries = 0;
+  for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+    let start = performance.now();
+    segmentDocument(parsePlainText(documentText));
+    segmentTimes.push(performance.now() - start);
 
-  for (const contract of goldenSet) {
-    const text = renderContractText(contract);
+    start = performance.now();
+    evaluateRiskRules(clauses);
+    ruleTimes.push(performance.now() - start);
 
-    let clauses = segmentDocument(parsePlainText(text));
-    totalClauses += clauses.length;
-
-    for (let i = 0; i < ITERATIONS; i += 1) {
-      const start = performance.now();
-      clauses = segmentDocument(parsePlainText(text));
-      segmentTimes.push(performance.now() - start);
-    }
-
-    for (let i = 0; i < ITERATIONS; i += 1) {
-      const start = performance.now();
-      totalFindings += evaluateRiskRules(clauses).length;
-      ruleTimes.push(performance.now() - start);
-    }
-
-    for (const qa of contract.qaPairs) {
-      for (let i = 0; i < ITERATIONS; i += 1) {
-        const start = performance.now();
-        retrieveClauses(clauses, qa.question, 6);
-        retrievalTimes.push(performance.now() - start);
-      }
-      retrievalQueries += 1;
-    }
-
-    for (let i = 0; i < 20; i += 1) {
-      const start = performance.now();
-      await provider.completeJson("classify", JSON.stringify(clauses.map((c) => c.id)), classificationSchema);
-      classifyTimes.push(performance.now() - start);
-    }
+    start = performance.now();
+    buildRetrievalIndex(clauses);
+    indexBuildTimes.push(performance.now() - start);
   }
+
+  const retrievalIndex = buildRetrievalIndex(clauses);
+  const questions = goldenSet.flatMap((contract) => contract.qaPairs.map((pair) => pair.question));
+  for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+    const question = questions[iteration % questions.length] ?? "What are the obligations?";
+    const start = performance.now();
+    retrieveFromIndex(retrievalIndex, question, 6);
+    retrievalTimes.push(performance.now() - start);
+  }
+
+  let classificationCalls = 0;
+  let answerCalls = 0;
+  const provider: LLMProvider = {
+    modelLabel: "benchmark-deterministic-provider",
+    async completeJson<T>(_system: string, user: string, schema): Promise<T> {
+      if (schema.description === "clause-classification") {
+        classificationCalls += 1;
+        const batch = JSON.parse(user) as Array<{ id: string; text: string }>;
+        return schema.parse({
+          items: batch.map(({ id, text }) => ({ clauseId: id, type: "other", severity: "low", summary: text.slice(0, 100) })),
+        });
+      }
+      answerCalls += 1;
+      return schema.parse({ answer: "The clause describes the parties’ obligations. [C1]" });
+    },
+  };
+
+  clearCache();
+  await classifyClauses(provider, clauses);
+  const classificationCallsFirstPass = classificationCalls;
+  await classifyClauses(provider, clauses);
+  const classificationCallsOnCachedPass = classificationCalls - classificationCallsFirstPass;
+
+  clearCache();
+  const repeatedQuestionCount = 100;
+  for (let iteration = 0; iteration < repeatedQuestionCount; iteration += 1) {
+    await answerQuestion(
+      "What obligations does this clause create?",
+      clauses,
+      provider,
+      "en",
+      { cacheScope: "benchmark-150-clause-document", perspective: "party_a" },
+    );
+  }
+  const answerCacheStats = getCacheStats();
+  const answerCacheHitRate = answerCacheStats.hits / (answerCacheStats.hits + answerCacheStats.misses);
 
   const segment = stats(segmentTimes);
   const rules = stats(ruleTimes);
+  const indexBuild = stats(indexBuildTimes);
   const retrieval = stats(retrievalTimes);
-  const classify = stats(classifyTimes);
-
-  // Cost model, not a measurement: BATCH_SIZE in classify.ts is 25.
-  const BATCH_SIZE = 25;
-  const callsFor = (n: number) => Math.ceil(n / BATCH_SIZE);
-  const twoClauseCalls = callsFor(2);
-  const twoHundredClauseCalls = callsFor(200);
+  const classificationCallCount = Math.ceil(clauses.length / 25);
+  const cpu = os.cpus()[0]?.model ?? "unknown CPU";
+  const machine = `${os.platform()} ${os.release()} (${os.arch()}); ${cpu}`;
 
   const markdown = `# Benchmark Results
 
 Generated: ${new Date().toISOString()}
 Node: ${process.version}
-Documents: ${goldenSet.length} golden contracts
+Machine: ${machine}
+Source: 150 clauses generated from ${goldenSet.length} golden contracts
 Iterations per measurement: ${ITERATIONS}
 
-All figures below are **measured** wall-clock timings of the real
-\`segmentDocument\`, \`evaluateRiskRules\`, \`retrieveClauses\` and
-\`MockProvider.completeJson\` implementations in \`lib/core\`. No values are
-simulated or randomised.
+Timings are measured wall-clock values for the same in-memory 150-clause
+document. The deterministic provider is a test double; provider timings are
+not treated as model latency.
 
 | Metric | Mean (ms) | p50 (ms) | p95 (ms) | Max (ms) |
 | :--- | ---: | ---: | ---: | ---: |
-| parse + segment (2-clause doc) | ${fmt(segment.mean)} | ${fmt(segment.p50)} | ${fmt(segment.p95)} | ${fmt(segment.max)} |
-| evaluateRiskRules (2-clause doc) | ${fmt(rules.mean)} | ${fmt(rules.p50)} | ${fmt(rules.p95)} | ${fmt(rules.max)} |
-| retrieveClauses (BM25, 1 query) | ${fmt(retrieval.mean)} | ${fmt(retrieval.p50)} | ${fmt(retrieval.p95)} | ${fmt(retrieval.max)} |
-| MockProvider.completeJson | ${fmt(classify.mean)} | ${fmt(classify.p50)} | ${fmt(classify.p95)} | ${fmt(classify.max)} |
+| parse + segment (150 clauses) | ${fmt(segment.mean)} | ${fmt(segment.p50)} | ${fmt(segment.p95)} | ${fmt(segment.max)} |
+| evaluateRiskRules (150 clauses) | ${fmt(rules.mean)} | ${fmt(rules.p50)} | ${fmt(rules.p95)} | ${fmt(rules.max)} |
+| buildRetrievalIndex (150 clauses) | ${fmt(indexBuild.mean)} | ${fmt(indexBuild.p50)} | ${fmt(indexBuild.p95)} | ${fmt(indexBuild.max)} |
+| retrieveFromIndex (one query) | ${fmt(retrieval.mean)} | ${fmt(retrieval.p50)} | ${fmt(retrieval.p95)} | ${fmt(retrieval.max)} |
 
-## Derived
+## Measured counts
 
 | Metric | Value |
 | :--- | ---: |
-| Clauses segmented (total, all docs) | ${totalClauses} |
-| Rule findings (total, all docs) | ${totalFindings} |
-| Retrieval queries measured | ${retrievalQueries} |
-| LLM calls for a 2-clause doc | ${twoClauseCalls} |
-| LLM calls for a 200-clause doc | ${twoHundredClauseCalls} |
+| Segmented clauses | ${clauses.length} |
+| Classification calls on first pass | ${classificationCallsFirstPass} |
+| Classification calls on identical cached pass | ${classificationCallsOnCachedPass} |
+| Answer-cache repeated-question runs | ${repeatedQuestionCount} |
+| Answer-cache provider calls | ${answerCalls} |
+| Answer-cache hits | ${answerCacheStats.hits} |
+| Answer-cache misses | ${answerCacheStats.misses} |
+| Answer-cache hit rate | ${(answerCacheHitRate * 100).toFixed(2)}% |
 
-\`classifyClauses\` batches at ${BATCH_SIZE} clauses per call
-(\`lib/core/src/classify.ts\`), so call count grows as \`ceil(n / ${BATCH_SIZE})\`:
-a 2-clause document costs 1 call and a 200-clause document costs ${twoHundredClauseCalls} calls.
-
-## What these numbers do not say
-
-- \`MockProvider\` performs a local file read, so its timing is harness
-  overhead. It is **not** a model latency or token-cost measurement. Real
-  \`GroqProvider\` latency requires a live \`GROQ_API_KEY\` and network access.
-- TTFB, tokens-per-document and cold/warm cache timings are omitted rather
-  than invented, because nothing in this repository measures them. A streaming
-  endpoint would be needed to measure TTFB honestly.
-- The golden documents are 2 clauses each, so per-document timings reflect
-  that size, not a realistic 50-200 clause contract.
+Classification is made in 25-clause batches; the reported call counts are
+observed calls from the benchmark provider spy. Cache hit rate is observed
+from the exported answer-cache statistics for the repeated-question run.
 `;
 
   const outputPath = join(HERE, "RESULTS.md");

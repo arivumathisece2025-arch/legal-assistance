@@ -5,6 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface SessionResponse {
+  csrfToken: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -97,11 +101,56 @@ export const QuestionInputPerspective = {
   party_b: 'party_b',
 } as const;
 
+export type QuestionInputLanguage = typeof QuestionInputLanguage[keyof typeof QuestionInputLanguage];
+
+
+export const QuestionInputLanguage = {
+  en: 'en',
+  ta: 'ta',
+  hi: 'hi',
+} as const;
+
 export interface QuestionInput {
   documentId: string;
   /** @minLength 1 */
   question: string;
   perspective: QuestionInputPerspective;
+  language?: QuestionInputLanguage;
+}
+
+export type SimplifyInputLanguage = typeof SimplifyInputLanguage[keyof typeof SimplifyInputLanguage];
+
+
+export const SimplifyInputLanguage = {
+  en: 'en',
+  ta: 'ta',
+  hi: 'hi',
+} as const;
+
+export interface SimplifyInput {
+  language: SimplifyInputLanguage;
+  clauseIds?: string[];
+}
+
+export type SimplifiedClauseLevel = typeof SimplifiedClauseLevel[keyof typeof SimplifiedClauseLevel];
+
+
+export const SimplifiedClauseLevel = {
+  'as-written': 'as-written',
+  plain: 'plain',
+  simple: 'simple',
+} as const;
+
+export interface SimplifiedClause {
+  clauseId: string;
+  level: SimplifiedClauseLevel;
+  text: string;
+  flagged: boolean;
+  issues: string[];
+}
+
+export interface SimplifyResponse {
+  items: SimplifiedClause[];
 }
 
 export interface Citation {
