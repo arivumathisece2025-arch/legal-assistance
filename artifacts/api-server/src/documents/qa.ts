@@ -1,50 +1,14 @@
 import {
   answerQuestion,
   streamAnswerQuestion,
-  GroqProvider,
-  MockProvider,
   classifyClauses,
   segmentDocument,
-  type LLMProvider,
   type ParsedDocument,
 } from "@workspace/core";
 import { AskQuestionResponse } from "@workspace/api-zod";
-import { createLogger } from "../lib/secureLogger";
 import { appendAuditLog, hashAuditIdentifier } from "../lib/auditLog";
 import { getAccessibleDocument, toCoreClauses, type DocumentRecord } from "./store";
-
-const secureLogger = createLogger("api-server");
-
-function groqProvider(model?: string): GroqProvider {
-  return new GroqProvider({
-    ...(model ? { model } : {}),
-    onUpstreamError: (status, upstreamBody) => {
-      secureLogger.error("LLM upstream request failed", { status, body: upstreamBody });
-    },
-  });
-}
-
-/**
- * Builds the provider used for grounded document Q&A.
- *
- * This used to be an inline object literal that string-concatenated a quote
- * from the top-ranked clause. It was never an LLM call: it ignored the system
- * prompt, ignored the configured models, and bypassed nothing useful, because
- * `answerQuestion` already performs its own retrieval, citation, and grounding
- * verification. The result was a canned quote presented as a grounded answer.
- *
- * Model selection is explicit rather than inherited from `GroqProvider`'s
- * default, so that "which model answers a user's question" is answerable by
- * reading this line rather than by inference.
- */
-export function answerProvider(): LLMProvider {
-  if (process.env.MOCK_LLM === "1") {
-    return new MockProvider();
-  }
-
-  const smartModel = process.env.GROQ_MODEL_SMART ?? process.env.GROQ_MODEL_FAST;
-  return groqProvider(smartModel);
-}
+import { answerProvider } from "./providers";
 
 export async function classifyDocumentPages(pages: ParsedDocument["pages"]): Promise<DocumentRecord["clauses"]> {
   const parsed: ParsedDocument = { pageCount: pages.length, pages, headings: [], isScanned: false };

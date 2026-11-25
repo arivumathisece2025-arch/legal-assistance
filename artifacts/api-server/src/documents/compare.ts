@@ -1,25 +1,15 @@
 import { Router, type IRouter } from "express";
-import { compareVersions, GroqProvider, MockProvider, type AlignableClause } from "@workspace/core";
+import { compareVersions, type AlignableClause } from "@workspace/core";
 import {
   CompareDocumentVersionsBody,
   CompareDocumentVersionsParams,
   CompareDocumentVersionsResponse,
 } from "@workspace/api-zod";
 import { appendAuditLog, hashAuditIdentifier } from "../lib/auditLog";
-import { createLogger } from "../lib/secureLogger";
 import { getAccessibleDocument, type DocumentRecord } from "./store";
+import { versionDiffProvider } from "./providers";
 
 const router: IRouter = Router();
-const secureLogger = createLogger("api-server");
-
-function groqProvider(model?: string): GroqProvider {
-  return new GroqProvider({
-    ...(model ? { model } : {}),
-    onUpstreamError: (status, upstreamBody) => {
-      secureLogger.error("LLM upstream request failed", { status, body: upstreamBody });
-    },
-  });
-}
 
 function toComparableClause(clause: DocumentRecord["clauses"][number]): AlignableClause {
   return {
@@ -29,20 +19,6 @@ function toComparableClause(clause: DocumentRecord["clauses"][number]): Alignabl
     text: clause.text,
     type: clause.type,
   };
-}
-
-/**
- * Phase 7 sends only the changed pairs to the reasoning tier. Nothing here
- * hardcodes a model name: the smart tier is read from the environment and
- * falls back to the provider default when it is not configured.
- */
-function versionDiffProvider() {
-  if (process.env.MOCK_LLM === "1") {
-    return new MockProvider();
-  }
-
-  const smartModel = process.env.GROQ_MODEL_SMART ?? process.env.GROQ_MODEL_FAST;
-  return groqProvider(smartModel);
 }
 
 router.post("/documents/:id/compare", async (req, res): Promise<void> => {
