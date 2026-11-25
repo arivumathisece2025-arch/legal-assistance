@@ -7,9 +7,10 @@
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "lint": "eslint .",
-    "format:check": "prettier --check eslint.config.js .prettierrc package.json artifacts/clause-compass/src/pages/brief.tsx",
+    "format:check": "prettier --check eslint.config.js .prettierrc package.json artifacts/clause-compass/src/App.tsx artifacts/clause-compass/src/index.css artifacts/clause-compass/src/pages/accessibility.tsx artifacts/clause-compass/src/pages/brief.tsx artifacts/clause-compass/src/pages/compare.tsx artifacts/clause-compass/src/pages/document.tsx e2e/accessibility.spec.ts",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "test": "pnpm --filter @workspace/core test && pnpm --filter @workspace/api-server test",
+    "test:coverage": "pnpm --filter @workspace/core run test:coverage && pnpm --filter @workspace/api-server run test:coverage",
     "test:e2e": "playwright test",
     "bench:eval": "pnpm --filter @workspace/api-server exec tsx ../../benchmarks/eval.ts",
     "bench:perf": "pnpm --filter @workspace/api-server exec tsx ../../benchmarks/perf.ts",
@@ -30,5 +31,12 @@
     "prettier": "^3.9.6",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.74.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser": "2.4.0",
+      "proxy-addr": "2.0.8",
+      "qs": "6.16.1"
+    }
   }
 }

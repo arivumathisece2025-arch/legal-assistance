@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const args = process.argv.slice(2);
-const coverage = args.includes("--coverage");
+const coverage = args.includes("--coverage") || process.env.COVERAGE === "1";
 const testDirectory = path.resolve(process.cwd(), args.find((arg) => arg !== "--coverage") ?? "src/__tests__");
 
 function findTests(directory) {
