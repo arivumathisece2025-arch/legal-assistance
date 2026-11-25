@@ -1,3 +1,42 @@
+# Clause Compass: PromptWars submission
+
+## Problem statement
+
+> Participants will take part in an online AI and prompt-based challenge in
+> collaboration with PromptWars. They will demonstrate their ability to understand
+> prompts, use AI tools effectively, think creatively, and solve assigned tasks.
+
+**Assigned task:** a GenAI legal-information assistant that simplifies contracts,
+flags risky clauses, compares versions and answers questions about a provided
+document. It informs the user and never replaces legal advice.
+
+## How this submission meets each part of the challenge
+
+| Challenge skill | What I did | Where to see it |
+| :--- | :--- | :--- |
+| Understand prompts | Broke the task into 13 phased prompts (0-12). Each one fixes the stack, defines a "Done when" check, and ends with a rule to paste real command output. At runtime, system prompts restrict answers to retrieved clauses, require `[C#]` citations, and treat document text as data, not instructions. | [`docs/PROMPT_LOG.md`](docs/PROMPT_LOG.md), `lib/core/src/answer.ts`, `lib/core/src/adviceGate.ts` |
+| Use AI tools effectively | Replit Agent built the app phase by phase. Groq models run in two tiers: a fast model for batched clause classification, a smart model for answers, simplification and comparison. Calls are batched (25 clauses per call), cached, retried and time-limited, and a mock provider runs the whole pipeline offline. | [`docs/GENAI_SERVICES.md`](docs/GENAI_SERVICES.md), [`benchmarks/RESULTS.md`](benchmarks/RESULTS.md) |
+| Think creatively | Risk scoring is deterministic code and the LLM only handles language ([ADR 0002](docs/adr/0002-deterministic-rules-over-llm-judgment.md)). A citation verifier strips unsupported claims. An advice gate turns "should I sign?" into an information question. Voice questions work in English, Tamil and Hindi. A hash-chained audit log detects tampering. The golden set keeps its one failing case instead of being tuned away. | [ADRs](docs/adr/), `lib/core/src/verify.ts` |
+| Solve the assigned task | Upload and parse contracts (PDF, DOCX, text), plain-language simplification, risk flags, grounded Q&A with citations, version comparison, a Lawyer Prep Brief, and data deletion. | `lib/api-spec/openapi.yaml`, [`docs/SCORECARD.md`](docs/SCORECARD.md) |
+
+## Where AI output was wrong and I corrected it
+
+- The first prompts assumed Python/FastAPI. The workspace was a TypeScript
+  scaffold, so I switched stacks deliberately ([ADR 0004](docs/adr/0004-typescript-over-python.md)).
+- An AI-assisted review found shared anonymous identity, a public audit
+  endpoint, CSRF on only one route and predictable document IDs. These were
+  fixed and covered by tests.
+- The self-audit found documentation claiming features that had no call
+  site (simplify, classification). They were wired in and tested.
+- Benchmarks were rerun after each change. Measured results replaced estimates.
+
+## Verify it yourself
+
+```bash
+pnpm install && pnpm test && pnpm run bench:eval && pnpm exec playwright test
+```
+
+
 # Clause Compass
 
 Clause Compass reads a contract, explains it in plain language, flags the clauses
