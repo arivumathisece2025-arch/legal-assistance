@@ -24,8 +24,8 @@ slower to test. Keeping `lib/core` pure means every piece of domain logic —
 the PII redactor, the injection scanner, every risk rule, the citation
 verifier — has direct, dependency-free unit tests, using Node's built-in test
 runner through `scripts/run-tests.mjs` with `tsx`, not an external test
-framework. The latest verified `pnpm test` run contains 162 tests total (80 in
-`@workspace/core`, 82 in `@workspace/api-server`), all passing.
+framework. The latest verified `pnpm test` run contains 185 tests total (98 in
+`@workspace/core`, 87 in `@workspace/api-server`), all passing.
 
 ## Alternatives considered
 - **Logic inline in Express route handlers**: rejected — the default

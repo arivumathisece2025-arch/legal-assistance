@@ -76,7 +76,7 @@ A pnpm workspace with a strict separation of concerns:
 ```bash
 pnpm install
 cp .env.example .env      # set GROQ_API_KEY and replace the encryption-key placeholder
-pnpm test                 # 162 unit/integration tests (latest verified count)
+pnpm test                 # 185 unit/integration tests (latest verified count)
 pnpm run bench:eval       # golden-set metrics
 pnpm run bench:perf       # measured timings -> benchmarks/RESULTS.md
 pnpm exec playwright test # accessibility e2e
@@ -107,23 +107,20 @@ names them.
    The single miss is a synonym case ("change" vs "amend"), which lexical
    retrieval cannot resolve. The fixture is deliberately left failing rather
    than tuned. See [ADR 0001](docs/adr/0001-bm25-over-embeddings.md).
-2. **CI is minimal.** `.github/workflows/secret-scan.yml` runs gitleaks over full
-   history. There is no workflow yet that runs `pnpm test` and Playwright on
-   every pull request.
-3. **Audit durability is best-effort.** With `DATABASE_URL`, entries are
+2. **Audit durability is best-effort.** With `DATABASE_URL`, entries are
    mirrored to `audit_log_entries` and reloaded/verified at startup, but writes
    are fire-and-forget and each process still has its own chain. There is no
    cross-instance ordering or immutable/WORM database policy.
-4. **Document restart recovery is incomplete.** Uploads write encrypted blobs
+3. **Document restart recovery is incomplete.** Uploads write encrypted blobs
    when a database is configured, but the current document reads use the
    in-memory map and do not rehydrate those records after a process restart.
-5. **Session identity is not authentication.** Each anonymous browser session
+4. **Session identity is not authentication.** Each anonymous browser session
    receives a random identity for ownership isolation; there is no login or
    account recovery, so clearing the session loses access to that session's docs.
-6. **Golden set scope.** Fixtures are two-clause documents, so they exercise rule
+5. **Golden set scope.** Fixtures are two-clause documents, so they exercise rule
    and retrieval logic well but not segmentation of realistic 50-200 clause
    contracts.
-7. **Secret history.** Credentials have appeared in git history, which has not
+6. **Secret history.** Credentials have appeared in git history, which has not
    been rewritten; this pass does not claim that historical exposure is
    resolved. Treat those values as exposed and verify provider-side revocation.
    See [THREAT_MODEL.md](docs/THREAT_MODEL.md).

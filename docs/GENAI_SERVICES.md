@@ -1,7 +1,7 @@
 # GenAI services used, and where
 
-This table reflects the verified routing in the current repo: the provider is
-constructed in [artifacts/api-server/src/routes/documents.ts](../artifacts/api-server/src/routes/documents.ts), where `GROQ_MODEL_SMART` is selected with a `GROQ_MODEL_FAST` fallback for the answering path and `versionDiffProvider` uses the smart model explicitly.
+This table reflects the verified routing in the current repo: `answerProvider` is
+constructed in [artifacts/api-server/src/documents/qa.ts](../artifacts/api-server/src/documents/qa.ts), where `GROQ_MODEL_SMART` is selected with a `GROQ_MODEL_FAST` fallback; the comparison provider is configured in [artifacts/api-server/src/documents/compare.ts](../artifacts/api-server/src/documents/compare.ts).
 
 | Service | Env var | Called from | Purpose |
 |---|---|---|---|
@@ -17,9 +17,9 @@ constructed in [artifacts/api-server/src/routes/documents.ts](../artifacts/api-s
 
 ## Prose summary
 
-Clause Compass uses hosted LLM APIs via Groq (model: `llama-3.1-70b-versatile`
-and a smaller fast-tier model, per `.env`) strictly for perception and language
-tasks — never for legal judgment. All risk scoring, deadline arithmetic, and
+Clause Compass uses hosted LLM APIs via Groq (models set by
+`GROQ_MODEL_SMART` / `GROQ_MODEL_FAST` / `GROQ_MODEL_AUDIO`) strictly for
+perception and language tasks — never for legal judgment. All risk scoring, deadline arithmetic, and
 inconsistency detection are computed by a deterministic TypeScript rule engine,
 never by a model. Notably, the information-versus-advice gate makes zero LLM
 calls at all — it is pure regex pattern matching, which is a stronger

@@ -8,7 +8,7 @@
 | TypeScript builds cleanly across workspace packages | Fresh command: `pnpm run typecheck` from the repository root; the project script runs `tsc --build` and workspace package checks. | PASS |
 | 5 ADRs exist with real rejected alternatives | ADR files in `docs/adr/`: `0001-bm25-over-embeddings.md`, `0002-deterministic-rules-over-llm-judgment.md`, `0003-lib-core-stays-framework-free.md`, `0004-typescript-over-python.md`, `0005-no-vector-database.md` contain explicit rejected alternatives and their trade-offs. | PASS |
 | Chat completions use the `LLMProvider` abstraction | Core chat calls use `provider.completeJson(...)`; audio transcription is a separate direct request to Groq's transcription endpoint in `artifacts/api-server/src/routes/audio.ts`. | PASS |
-| The chat provider is selected at the real construction point | `artifacts/api-server/src/routes/documents.ts` selects `GROQ_MODEL_SMART` with `GROQ_MODEL_FAST` fallback and supplies a secure upstream-error logger to `GroqProvider`. | PASS |
+| The chat provider is selected at the real construction point | `artifacts/api-server/src/documents/qa.ts` selects `GROQ_MODEL_SMART` with `GROQ_MODEL_FAST` fallback and supplies a secure upstream-error logger to `GroqProvider`. | PASS |
 
 ## Security
 
@@ -33,9 +33,9 @@
 
 | Requirement | Evidence (file:line or pasted output) | Status |
 | :--- | :--- | :--- |
-| Full real test count (Core) | Fresh `pnpm test` output: 80 core tests pass, 0 fail. | PASS |
-| Full real test count (API Server) | Fresh `pnpm test` output: 82 API-server tests pass, 0 fail. | PASS |
-| Total verified test count | The latest `pnpm test` run reports 162 tests total, with zero failures. | PASS |
+| Full real test count (Core) | Fresh `pnpm test` output: 98 core tests pass, 0 fail. | PASS |
+| Full real test count (API Server) | Fresh `pnpm test` output: 87 API-server tests pass, 0 fail. | PASS |
+| Total verified test count | The latest `pnpm test` run reports 185 tests total, with zero failures. | PASS |
 | Golden-set evaluation metrics are in repo | `benchmarks/eval.ts` emits Rule F1 and Citation Accuracy; `docs/adr/0001-bm25-over-embeddings.md` notes the measured result: `93.3% citation accuracy` on the golden set. | PASS |
 | Fabricated-citation guard is tested | Fresh output: `✔ fabricated citations and quotes are stripped and grounding ratio is computed` from the core suite. | PASS |
 
@@ -53,7 +53,7 @@
 | :--- | :--- | :--- |
 | README implementation references point to real files | README includes concrete references to `lib/core/src/classify.ts`, `lib/core/src/rules/packV1.ts`, and `lib/core/src/adviceGate.ts`. | PASS |
 | Lawyer Prep Brief and Advice Gate are reachable in the product flow | The brief is built client-side in `artifacts/clause-compass/src/App.tsx` with `buildLawyerPrepBrief`; there is no brief API route. `lib/core/src/adviceGate.ts` is used before retrieval in `lib/core/src/answer.ts`. | PASS |
-| `GENAI_SERVICES.md` matches actual provider usage | The current file state is verified against `artifacts/api-server/src/routes/documents.ts`, which selects `GROQ_MODEL_SMART` with `GROQ_MODEL_FAST` fallback at the provider construction site. | PASS |
+| `GENAI_SERVICES.md` matches actual provider usage | The current file state is verified against `artifacts/api-server/src/documents/qa.ts` and `artifacts/api-server/src/documents/compare.ts`, the provider construction sites. | PASS |
 | The repo documents its real weakness honestly | `README.md` and `docs/adr/0001-bm25-over-embeddings.md` explicitly call out the BM25 synonym gap (`93.3% citation accuracy` not 100%) instead of hiding it. | PASS |
 
 ---
@@ -62,9 +62,9 @@
 
 The repository currently verifies as follows:
 
-- Core tests: 80 pass, 0 fail
-- API tests: 82 pass, 0 fail
-- Total: 162 pass, 0 fail
-- The model routing is confirmed at the real provider-construction point in `artifacts/api-server/src/routes/documents.ts`.
+- Core tests: 98 pass, 0 fail
+- API tests: 87 pass, 0 fail
+- Total: 185 pass, 0 fail
+- The model routing is confirmed at the real provider-construction points in `artifacts/api-server/src/documents/qa.ts` and `artifacts/api-server/src/documents/compare.ts`.
 - Historical secrets remain an unresolved exposure in git history; this work did not rewrite history or establish provider-side revocation.
 - The repository does not hide the known lexical BM25 limitation, and the audit scorecard above is grounded in the actual files and test output present in this workspace.

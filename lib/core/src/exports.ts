@@ -1,4 +1,4 @@
-import { evaluateDocumentRisk, type RiskFinding } from "./rules/packV1";
+import { evaluateDocumentRisk, type RiskClause, type RiskFinding } from "./rules/packV1";
 import type { Obligation } from "./obligations";
 
 export type PartyBreakdown = Record<"partyA" | "partyB", Obligation[]>;
@@ -133,17 +133,15 @@ export function buildLawyerPrepBriefFromDocument(
   clauses: Array<{ id: string; heading: string; text: string; type?: string }>,
   obligations: Obligation[] = [],
 ): string {
-  const findings = evaluateDocumentRisk(
-    clauses.map((clause) => ({
-      ...clause,
-      ordinal: clause.id,
-      page: 1,
-      charStart: 0,
-      charEnd: clause.text.length,
-      type: clause.type ?? "other",
-    } as any)),
-    "both",
-  );
+  const riskClauses: RiskClause[] = clauses.map((clause) => ({
+    ...clause,
+    ordinal: clause.id,
+    page: 1,
+    charStart: 0,
+    charEnd: clause.text.length,
+    type: clause.type ?? "other",
+  }));
+  const findings = evaluateDocumentRisk(riskClauses, "both");
 
   return buildLawyerPrepBrief({
     documentName,
